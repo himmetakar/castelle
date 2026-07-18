@@ -1,0 +1,34 @@
+{
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "hosting": {
+    "public": "public",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ]
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "castelle-ce64b",
+          "appId": "1:977939722051:android:26e1b5da9273acfc8a49f6",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "castelle-ce64b",
+          "configurations": {
+            "android": "1:977939722051:android:26e1b5da9273acfc8a49f6",
+            "ios": "1:977939722051:ios:25cb7b9c0340f4ec8a49f6"
+          }
+        }
+      }
+    }
+  }
+}

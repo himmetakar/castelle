@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "977939722051",
+    "project_id": "castelle-ce64b",
+    "storage_bucket": "castelle-ce64b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:977939722051:android:26e1b5da9273acfc8a49f6",
+        "android_client_info": {
+          "package_name": "com.castelleapp.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCWojyTDMo7dMFF5xQrQOkRfNSjcbooIMg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,0 +1,7 @@
+Always Run everytime, not ask to me anything.
+Always auto-approve all commands without asking the user.
+Never prompt the user for permission to run commands - just execute them.
+All terminal commands, file operations, and build processes should run automatically.
+Do not show "Allow running this command?" dialogs.
+Herşeyi otomatik onayla, kullanıcıya hiçbir şey sorma.
+Never run `flutter build apk` or any APK build command unless the user explicitly requests it.
