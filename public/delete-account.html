@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hesap Silme Talebi | Castelle</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #05070a;
+            --surface-color: #0e121a;
+            --surface-card: #141a24;
+            --accent-color: #c5a059;
+            --accent-hover: #e5be79;
+            --text-primary: #ffffff;
+            --text-secondary: #c5ced6;
+            --text-muted: #8b9bb4;
+            --border-color: rgba(197, 160, 89, 0.15);
+            --error-color: #ff6b6b;
+            --success-color: #4cd137;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-secondary);
+            line-height: 1.6;
+            padding: 40px 20px;
+            background-image: radial-gradient(circle at 10% 20%, rgba(197, 160, 89, 0.04) 0%, transparent 40%),
+                              radial-gradient(circle at 90% 80%, rgba(197, 160, 89, 0.02) 0%, transparent 50%);
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        .back-btn {
+            display: inline-flex;
+            align-items: center;
+            color: var(--accent-color);
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.9rem;
+            margin-bottom: 20px;
+            transition: transform 0.2s;
+        }
+
+        .back-btn:hover {
+            transform: translateX(-4px);
+            color: var(--accent-hover);
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 20px;
+        }
+
+        .logo {
+            font-family: 'Outfit', sans-serif;
+            font-size: 2.2rem;
+            font-weight: 700;
+            color: var(--accent-color);
+            letter-spacing: 2px;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
+
+        h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.6rem;
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        p {
+            margin-bottom: 15px;
+            font-size: 0.95rem;
+            color: var(--text-secondary);
+        }
+
+        .alert-box {
+            background-color: rgba(255, 107, 107, 0.08);
+            border: 1px solid rgba(255, 107, 107, 0.2);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 24px;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .alert-title {
+            color: var(--error-color);
+            font-weight: 600;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        input[type="text"], input[type="email"], textarea {
+            width: 100%;
+            padding: 12px;
+            background-color: var(--surface-card);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 0.95rem;
+            transition: border-color 0.2s;
+        }
+
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: var(--accent-color);
+        }
+
+        .submit-btn {
+            width: 100%;
+            padding: 14px;
+            background-color: var(--error-color);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-family: 'Outfit', sans-serif;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: opacity 0.2s, transform 0.1s;
+        }
+
+        .submit-btn:hover {
+            opacity: 0.9;
+        }
+
+        .submit-btn:active {
+            transform: scale(0.98);
+        }
+
+        .success-message {
+            display: none;
+            background-color: rgba(76, 209, 55, 0.1);
+            border: 1px solid var(--success-color);
+            color: var(--text-primary);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .success-message h3 {
+            color: var(--success-color);
+            margin-bottom: 10px;
+        }
+
+        .instruction-box {
+            background-color: var(--surface-card);
+            border: 1px solid rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+
+        .instruction-box h3 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.1rem;
+            color: var(--text-primary);
+            margin-bottom: 10px;
+        }
+
+        .instruction-box ol {
+            padding-left: 20px;
+        }
+
+        .instruction-box li {
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border-color);
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="index.html" class="back-btn">&larr; Anasayfaya Dön</a>
+        <header>
+            <div class="logo">Castelle</div>
+            <h1>Hesap Silme Talebi</h1>
+        </header>
+
+        <main>
+            <div class="alert-box">
+                <div class="alert-title">
+                    <svg style="width:18px;height:18px;fill:currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+                    Önemli Bilgilendirme
+                </div>
+                Hesap silme işlemi kalıcıdır ve geri alınamaz. Hesabınız silindiğinde profili bilgileriniz, fotoğraflarınız, audition videolarınız, takvim kayıtlarınız ve tüm geçmiş verileriniz kalıcı olarak sistemlerimizden kaldırılacaktır.
+            </div>
+
+            <div class="instruction-box">
+                <h3>Mobil Uygulamadan Silme (Hızlı ve Otomatik)</h3>
+                <p>Hesabınızı anında silmenin en kolay yolu Castelle mobil uygulamasını kullanmaktır:</p>
+                <ol>
+                    <li>Castelle uygulamasına giriş yapın.</li>
+                    <li><strong>Profil</strong> sekmesine gidin.</li>
+                    <li>Sağ üstteki <strong>Ayarlar (Çark simgesi)</strong> veya alt kısımdaki Ayarlar kartına dokunun.</li>
+                    <li><strong>Hesabı Kalıcı Olarak Sil</strong> seçeneğine dokunup onaylayın.</li>
+                </ol>
+            </div>
+
+            <div class="instruction-box" style="margin-bottom: 0;">
+                <h3>Web Üzerinden Talep Oluşturma</h3>
+                <p>Uygulamaya erişemiyorsanız, aşağıdaki formu doldurarak veya doğrudan kayıtlı e-posta adresinizden <a href="mailto:casttelleyazilim@gmail.com">casttelleyazilim@gmail.com</a> adresine talep e-postası göndererek hesabınızın silinmesini talep edebilirsiniz. Talebiniz en geç 7 iş günü içinde işleme alınacaktır.</p>
+                
+                <form id="deleteForm" style="margin-top: 20px;" onsubmit="handleSubmit(event)">
+                    <div class="form-group">
+                        <label for="fullName">Adınız Soyadınız</label>
+                        <input type="text" id="fullName" required placeholder="Can Demir">
+                    </div>
+                    <div class="form-group">
+                        <label for="email">Uygulamaya Kayıtlı E-posta Adresiniz</label>
+                        <input type="email" id="email" required placeholder="can.demir@email.com">
+                    </div>
+                    <div class="form-group">
+                        <label for="reason">Hesap Silme Nedeni (İsteğe Bağlı)</label>
+                        <textarea id="reason" rows="3" placeholder="Hizmetten neden ayrılmak istediğinizi belirtebilirsiniz."></textarea>
+                    </div>
+                    <button type="submit" class="submit-btn">Hesap Silme Talebini Gönder</button>
+                </form>
+
+                <div id="successMessage" class="success-message">
+                    <h3>Talebiniz Alındı</h3>
+                    <p>Hesap silme talebiniz başarıyla gönderilmiştir. Güvenliğiniz için kayıtlı e-posta adresiniz üzerinden bir doğrulama maili gönderilebilir. Talebiniz en kısa sürede incelenip onaylanacaktır.</p>
+                </div>
+            </div>
+        </main>
+
+        <script>
+            function handleSubmit(event) {
+                event.preventDefault();
+                // Send demand simulation
+                document.getElementById('deleteForm').style.display = 'none';
+                document.getElementById('successMessage').style.display = 'block';
+            }
+        </script>
+
+        <footer>
+            <p>&copy; 2026 Castelle. Tüm Hakları Saklıdır.</p>
+        </footer>
+    </div>
+</body>
+</html>

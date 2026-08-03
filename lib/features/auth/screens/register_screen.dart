@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:castelle/core/providers/auth_provider.dart';
 import 'package:castelle/core/theme/app_theme.dart';
 import 'package:castelle/core/constants/user_roles.dart';
+import 'package:castelle/core/widgets/policy_dialogs.dart';
 
 /// Castelle - Register Screen
 /// Premium kayıt ekranı - Rol seçimli
@@ -28,6 +29,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   UserRole _selectedRole = UserRole.actor;
+  bool _acceptedTerms = false;
 
   @override
   void dispose() {
@@ -41,6 +43,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   Future<void> _handleRegister() async {
     if (!_formKey.currentState!.validate()) return;
+
+    if (!_acceptedTerms) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Kayıt olmak için lütfen politikaları kabul edin.'),
+          backgroundColor: AppTheme.warning,
+        ),
+      );
+      return;
+    }
 
     final authProvider = context.read<AuthProvider>();
     final success = await authProvider.register(
@@ -267,7 +279,121 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         },
                       ).animate().fadeIn(delay: 650.ms).slideY(begin: 0.1),
 
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 18),
+
+                      // Politikalar onay kutusu
+                      FormField<bool>(
+                        initialValue: _acceptedTerms,
+                        validator: (value) {
+                          if (value != true) {
+                            return 'Politikaları kabul etmelisiniz';
+                          }
+                          return null;
+                        },
+                        builder: (state) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Checkbox(
+                                    value: _acceptedTerms,
+                                    activeColor: AppTheme.accent,
+                                    checkColor: AppTheme.textOnAccent,
+                                    onChanged: (val) {
+                                      setState(() {
+                                        _acceptedTerms = val ?? false;
+                                        state.didChange(val);
+                                      });
+                                    },
+                                  ),
+                                  Expanded(
+                                    child: RichText(
+                                      text: TextSpan(
+                                        style: GoogleFonts.inter(
+                                          fontSize: 11,
+                                          color: AppTheme.textSecondary,
+                                        ),
+                                        children: [
+                                          WidgetSpan(
+                                            child: InkWell(
+                                              onTap: () => PolicyDialogs.showTermsOfUse(context),
+                                              child: const Text(
+                                                'Kullanım Koşulları',
+                                                style: TextStyle(
+                                                  color: AppTheme.accent,
+                                                  fontWeight: FontWeight.bold,
+                                                  decoration: TextDecoration.underline,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          const TextSpan(text: ', '),
+                                          WidgetSpan(
+                                            child: InkWell(
+                                              onTap: () => PolicyDialogs.showPrivacyPolicy(context),
+                                              child: const Text(
+                                                'Gizlilik Politikası',
+                                                style: TextStyle(
+                                                  color: AppTheme.accent,
+                                                  fontWeight: FontWeight.bold,
+                                                  decoration: TextDecoration.underline,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          const TextSpan(text: ', '),
+                                          WidgetSpan(
+                                            child: InkWell(
+                                              onTap: () => PolicyDialogs.showKvkk(context),
+                                              child: const Text(
+                                                'KVKK',
+                                                style: TextStyle(
+                                                  color: AppTheme.accent,
+                                                  fontWeight: FontWeight.bold,
+                                                  decoration: TextDecoration.underline,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          const TextSpan(text: ' ve '),
+                                          WidgetSpan(
+                                            child: InkWell(
+                                              onTap: () => PolicyDialogs.showCookiePolicy(context),
+                                              child: const Text(
+                                                'Çerez Politikası',
+                                                style: TextStyle(
+                                                  color: AppTheme.accent,
+                                                  fontWeight: FontWeight.bold,
+                                                  decoration: TextDecoration.underline,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          const TextSpan(text: '\'nı okudum ve kabul ediyorum.'),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (state.hasError)
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 12, top: 4),
+                                  child: Text(
+                                    state.errorText ?? '',
+                                    style: const TextStyle(
+                                      color: AppTheme.error,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          );
+                        },
+                      ).animate().fadeIn(delay: 680.ms).slideY(begin: 0.1),
+
+                      const SizedBox(height: 24),
 
                       // Kayıt butonu
                       SizedBox(

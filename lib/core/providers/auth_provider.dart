@@ -439,6 +439,52 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  /// Hesabı kalıcı olarak sil (KVKK & Hesap Silme gereksinimleri)
+  Future<bool> deleteAccount() async {
+    _status = AuthStatus.loading;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final firebaseUser = _authService.currentUser;
+      if (firebaseUser == null) {
+        throw Exception('Giriş yapmış kullanıcı bulunamadı.');
+      }
+      final uid = firebaseUser.uid;
+
+      // 1. Firestore dokümanını sil (KVKK gereğince tüm veriler)
+      await FirebaseFirestore.instance.collection('users').doc(uid).delete();
+
+      // 2. Firebase Auth kullanıcısını sil
+      await firebaseUser.delete();
+
+      // 3. Lokal state'i temizle
+      _user = null;
+      _status = AuthStatus.unauthenticated;
+      _errorMessage = null;
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('is_logged_in', false);
+
+      notifyListeners();
+      return true;
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'requires-recent-login') {
+        _errorMessage = 'Hesap silme hassas bir işlem olduğu için yakın zamanda tekrar giriş yapmış olmalısınız. Lütfen çıkış yapıp tekrar giriş yaptıktan sonra deneyin.';
+      } else {
+        _errorMessage = e.message ?? 'Hesap silinirken bir hata oluştu.';
+      }
+      _status = AuthStatus.error;
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _status = AuthStatus.error;
+      _errorMessage = e.toString().replaceAll('Exception: ', '');
+      notifyListeners();
+      return false;
+    }
+  }
+
   /// Hata mesajını temizle
   void clearError() {
     _errorMessage = null;

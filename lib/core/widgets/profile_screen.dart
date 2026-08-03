@@ -5,6 +5,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:castelle/core/providers/auth_provider.dart';
 import 'package:castelle/core/theme/app_theme.dart';
 import 'package:castelle/features/actor/screens/actor_cv_view_screen.dart';
+import 'package:castelle/core/widgets/policy_dialogs.dart';
 
 /// Castelle - Ortak Profil Ekranı
 /// Tüm roller için kullanılan profil görüntüleme ve düzenleme
@@ -170,6 +171,39 @@ class ProfileScreen extends StatelessWidget {
                       onTap: () => _showAboutDialog(context),
                     ),
                   ]).animate().fadeIn(delay: 500.ms).slideY(begin: 0.05),
+
+                  const SizedBox(height: 24),
+
+                  // Sözleşmeler & Politikalar
+                  _buildSectionTitle(context, 'Sözleşmeler & Politikalar'),
+                  const SizedBox(height: 12),
+                  _buildSettingsCard(context, [
+                    _SettingsItem(
+                      icon: Icons.privacy_tip_outlined,
+                      label: 'Gizlilik Politikası',
+                      onTap: () => PolicyDialogs.showPrivacyPolicy(context),
+                    ),
+                    _SettingsItem(
+                      icon: Icons.description_outlined,
+                      label: 'Kullanım Koşulları',
+                      onTap: () => PolicyDialogs.showTermsOfUse(context),
+                    ),
+                    _SettingsItem(
+                      icon: Icons.gavel_outlined,
+                      label: 'KVKK Aydınlatma Metni',
+                      onTap: () => PolicyDialogs.showKvkk(context),
+                    ),
+                    _SettingsItem(
+                      icon: Icons.cookie_outlined,
+                      label: 'Çerez Politikası',
+                      onTap: () => PolicyDialogs.showCookiePolicy(context),
+                    ),
+                    _SettingsItem(
+                      icon: Icons.delete_forever_outlined,
+                      label: 'Hesabımı Sil',
+                      onTap: () => _showDeleteAccountDialog(context),
+                    ),
+                  ]).animate().fadeIn(delay: 550.ms).slideY(begin: 0.05),
 
                   const SizedBox(height: 28),
 
@@ -480,6 +514,119 @@ class ProfileScreen extends StatelessWidget {
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Tamam'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeleteAccountDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surfaceCard,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+          side: const BorderSide(color: AppTheme.border, width: 0.5),
+        ),
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: AppTheme.error),
+            const SizedBox(width: 8),
+            Text(
+              'Hesabımı Sil',
+              style: GoogleFonts.outfit(
+                fontWeight: FontWeight.bold,
+                color: AppTheme.error,
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Hesabınızı silmek istediğinizden emin misiniz?',
+              style: GoogleFonts.outfit(
+                fontWeight: FontWeight.w600,
+                color: AppTheme.textPrimary,
+                fontSize: 15,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Bu işlem kalıcıdır ve geri alınamaz. Profiliniz, tüm video ve fotoğraflarınız kalıcı olarak silinecektir.',
+              style: GoogleFonts.inter(
+                color: AppTheme.textSecondary,
+                fontSize: 13,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              'İptal',
+              style: GoogleFonts.inter(color: AppTheme.textTertiary),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              
+              // Show loading dialog
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (loadingCtx) => const Center(
+                  child: CircularProgressIndicator(color: AppTheme.error),
+                ),
+              );
+
+              final success = await context.read<AuthProvider>().deleteAccount();
+              
+              // Pop loading dialog
+              if (context.mounted) {
+                Navigator.pop(context);
+              }
+
+              if (success) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Hesabınız başarıyla silinmiştir.'),
+                      backgroundColor: AppTheme.success,
+                    ),
+                  );
+                }
+              } else {
+                if (context.mounted) {
+                  final err = context.read<AuthProvider>().errorMessage;
+                  showDialog(
+                    context: context,
+                    builder: (errCtx) => AlertDialog(
+                      backgroundColor: AppTheme.surfaceCard,
+                      title: const Text('Hata'),
+                      content: Text(err ?? 'Hesap silinirken bir hata oluştu.'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(errCtx),
+                          child: const Text('Tamam'),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.error,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Kalıcı Olarak Sil'),
           ),
         ],
       ),

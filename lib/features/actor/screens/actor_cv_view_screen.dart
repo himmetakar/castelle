@@ -13,6 +13,7 @@ import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:castelle/core/widgets/policy_dialogs.dart';
 import 'package:castelle/core/theme/app_theme.dart';
 import 'package:castelle/core/models/actor_profile_model.dart';
 import 'package:castelle/core/providers/auth_provider.dart';
@@ -609,6 +610,13 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
         ),
         actions: [
           if (widget.isOwner) ...[
+            IconButton(
+              icon: const Icon(Icons.settings, color: AppTheme.accent),
+              tooltip: 'Ayarlar ve Politikalar',
+              onPressed: () {
+                _showActorSettingsBottomSheet(context);
+              },
+            ),
             IconButton(
               icon: const Icon(Icons.account_balance_outlined, color: AppTheme.accent),
               tooltip: 'Banka Hesap Bilgileri',
@@ -3596,6 +3604,224 @@ class _ProfileInlineVideoPlayerState extends State<_ProfileInlineVideoPlayer> {
                       ),
                     ],
                   ),
+      ),
+    );
+  }
+
+  void _showActorSettingsBottomSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.surfaceCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.radiusMd)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Text(
+                  'Ayarlar ve Politikalar',
+                  style: GoogleFonts.outfit(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+              ),
+              const Divider(height: 1, color: AppTheme.border),
+              ListTile(
+                leading: const Icon(Icons.privacy_tip_outlined, color: AppTheme.accent),
+                title: Text('Gizlilik Politikası', style: GoogleFonts.inter(color: AppTheme.textPrimary)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  PolicyDialogs.showPrivacyPolicy(context);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.description_outlined, color: AppTheme.accent),
+                title: Text('Kullanım Koşulları', style: GoogleFonts.inter(color: AppTheme.textPrimary)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  PolicyDialogs.showTermsOfUse(context);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.gavel_outlined, color: AppTheme.accent),
+                title: Text('KVKK Aydınlatma Metni', style: GoogleFonts.inter(color: AppTheme.textPrimary)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  PolicyDialogs.showKvkk(context);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.cookie_outlined, color: AppTheme.accent),
+                title: Text('Çerez Politikası', style: GoogleFonts.inter(color: AppTheme.textPrimary)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  PolicyDialogs.showCookiePolicy(context);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete_forever_outlined, color: AppTheme.error),
+                title: Text('Hesabımı Kalıcı Olarak Sil', style: GoogleFonts.inter(color: AppTheme.error)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showDeleteAccountDialog(context);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.logout, color: AppTheme.textTertiary),
+                title: Text('Çıkış Yap', style: GoogleFonts.inter(color: AppTheme.textPrimary)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showLogoutDialog(context);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showDeleteAccountDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surfaceCard,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+          side: const BorderSide(color: AppTheme.border, width: 0.5),
+        ),
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: AppTheme.error),
+            const SizedBox(width: 8),
+            Text(
+              'Hesabımı Sil',
+              style: GoogleFonts.outfit(
+                fontWeight: FontWeight.bold,
+                color: AppTheme.error,
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Hesabınızı silmek istediğinizden emin misiniz?',
+              style: GoogleFonts.outfit(
+                fontWeight: FontWeight.w600,
+                color: AppTheme.textPrimary,
+                fontSize: 15,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Bu işlem kalıcıdır ve geri alınamaz. Profiliniz, tüm video ve fotoğraflarınız kalıcı olarak silinecektir.',
+              style: GoogleFonts.inter(
+                color: AppTheme.textSecondary,
+                fontSize: 13,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              'İptal',
+              style: GoogleFonts.inter(color: AppTheme.textTertiary),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              
+              // Show loading dialog
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (loadingCtx) => const Center(
+                  child: CircularProgressIndicator(color: AppTheme.error),
+                ),
+              );
+
+              final success = await context.read<AuthProvider>().deleteAccount();
+              
+              // Pop loading dialog
+              if (context.mounted) {
+                Navigator.pop(context);
+              }
+
+              if (success) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Hesabınız başarıyla silinmiştir.'),
+                      backgroundColor: AppTheme.success,
+                    ),
+                  );
+                }
+              } else {
+                if (context.mounted) {
+                  final err = context.read<AuthProvider>().errorMessage;
+                  showDialog(
+                    context: context,
+                    builder: (errCtx) => AlertDialog(
+                      backgroundColor: AppTheme.surfaceCard,
+                      title: const Text('Hata'),
+                      content: Text(err ?? 'Hesap silinirken bir hata oluştu.'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(errCtx),
+                          child: const Text('Tamam'),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.error,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Kalıcı Olarak Sil'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showLogoutDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Çıkış Yap'),
+        content: const Text('Hesabınızdan çıkış yapmak istediğinize emin misiniz?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('İptal'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              context.read<AuthProvider>().signOut();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primary,
+            ),
+            child: const Text('Çıkış Yap'),
+          ),
+        ],
       ),
     );
   }

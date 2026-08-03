@@ -3,20 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gizlilik Politikası | Castelle</title>
+    <title>Yasal Bilgiler & Politikalar | Castelle</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-color: #0b0c10;
-            --surface-color: #1f2833;
+            --bg-color: #05070a;
+            --surface-color: #0e121a;
+            --surface-card: #141a24;
             --accent-color: #c5a059; /* Luxury Gold */
             --accent-hover: #e5be79;
             --text-primary: #ffffff;
-            --text-secondary: #c5ced6;
-            --text-muted: #8b9bb4;
+            --text-secondary: #a0aec0;
+            --text-muted: #64748b;
             --border-color: rgba(197, 160, 89, 0.15);
+            --glow-color: rgba(197, 160, 89, 0.1);
         }
 
         * {
@@ -30,186 +32,268 @@
             background-color: var(--bg-color);
             color: var(--text-secondary);
             line-height: 1.6;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
             padding: 40px 20px;
-            background-image: radial-gradient(circle at 10% 20%, rgba(197, 160, 89, 0.05) 0%, transparent 40%),
-                              radial-gradient(circle at 90% 80%, rgba(139, 155, 180, 0.05) 0%, transparent 40%);
+            background-image: radial-gradient(circle at 10% 20%, rgba(197, 160, 89, 0.04) 0%, transparent 40%),
+                              radial-gradient(circle at 90% 80%, rgba(197, 160, 89, 0.02) 0%, transparent 50%);
         }
 
         .container {
-            max-width: 800px;
-            margin: 0 auto;
-            background-color: rgba(31, 40, 51, 0.4);
+            width: 100%;
+            max-width: 700px;
+            background-color: var(--surface-color);
             border: 1px solid var(--border-color);
-            border-radius: 20px;
+            border-radius: 24px;
             padding: 40px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6), 0 0 40px var(--glow-color);
             backdrop-filter: blur(10px);
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            text-align: center;
         }
 
         header {
-            text-align: center;
             margin-bottom: 40px;
-            border-bottom: 1px solid var(--border-color);
-            padding-bottom: 30px;
         }
 
-        .logo {
+        .logo-container {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 80px;
+            height: 80px;
+            border-radius: 20px;
+            background: linear-gradient(135deg, #141a24 0%, #05070a 100%);
+            border: 1px solid var(--border-color);
+            margin-bottom: 20px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.4);
+        }
+
+        .logo-svg {
+            width: 48px;
+            height: 48px;
+            fill: var(--accent-color);
+        }
+
+        .brand-name {
             font-family: 'Outfit', sans-serif;
-            font-size: 2.5rem;
+            font-size: 2.2rem;
             font-weight: 700;
-            color: var(--accent-color);
-            letter-spacing: 2px;
-            margin-bottom: 10px;
-            text-transform: uppercase;
-            display: inline-block;
-        }
-
-        h1 {
-            font-family: 'Outfit', sans-serif;
-            font-size: 1.8rem;
             color: var(--text-primary);
-            font-weight: 600;
-            margin-top: 10px;
+            letter-spacing: 3px;
+            margin-bottom: 8px;
+            text-transform: uppercase;
         }
 
-        .last-updated {
+        .subtitle {
+            font-size: 1rem;
+            color: var(--text-secondary);
+            max-width: 500px;
+            margin: 0 auto 10px auto;
+        }
+
+        .divider {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--border-color), transparent);
+            margin: 30px 0;
+        }
+
+        .links-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 16px;
+        }
+
+        @media (min-width: 550px) {
+            .links-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+            .colspan-2 {
+                grid-column: span 2;
+            }
+        }
+
+        .policy-card {
+            background-color: var(--surface-card);
+            border: 1px solid rgba(255, 255, 255, 0.03);
+            border-radius: 16px;
+            padding: 20px;
+            text-align: left;
+            text-decoration: none;
+            color: inherit;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .policy-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: linear-gradient(90deg, var(--accent-color), var(--accent-hover));
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .policy-card:hover {
+            transform: translateY(-4px);
+            border-color: var(--border-color);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3), 0 0 15px rgba(197, 160, 89, 0.05);
+            background-color: rgba(20, 26, 36, 0.8);
+        }
+
+        .policy-card:hover::before {
+            opacity: 1;
+        }
+
+        .policy-card h3 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.15rem;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .policy-card h3 svg {
+            width: 20px;
+            height: 20px;
+            fill: var(--accent-color);
+        }
+
+        .policy-card p {
             font-size: 0.85rem;
             color: var(--text-muted);
-            margin-top: 10px;
+            line-height: 1.4;
         }
 
-        section {
-            margin-bottom: 30px;
-        }
-
-        h2 {
-            font-family: 'Outfit', sans-serif;
-            font-size: 1.3rem;
+        .policy-card .arrow {
+            align-self: flex-end;
+            margin-top: 12px;
             color: var(--accent-color);
-            margin-bottom: 15px;
+            font-size: 0.9rem;
             font-weight: 600;
             display: flex;
             align-items: center;
+            gap: 4px;
+            opacity: 0.7;
+            transition: opacity 0.2s ease, transform 0.2s ease;
         }
 
-        p {
-            margin-bottom: 15px;
-            font-size: 0.95rem;
-            color: var(--text-secondary);
-        }
-
-        ul {
-            list-style: none;
-            margin-bottom: 20px;
-        }
-
-        li {
-            position: relative;
-            padding-left: 20px;
-            margin-bottom: 10px;
-            font-size: 0.95rem;
-        }
-
-        li::before {
-            content: "•";
-            color: var(--accent-color);
-            font-weight: bold;
-            font-size: 1.2rem;
-            position: absolute;
-            left: 0;
-            top: -2px;
-        }
-
-        a {
-            color: var(--accent-color);
-            text-decoration: none;
-            transition: color 0.2s;
-        }
-
-        a:hover {
-            color: var(--accent-hover);
-            text-decoration: underline;
+        .policy-card:hover .arrow {
+            opacity: 1;
+            transform: translateX(4px);
         }
 
         footer {
-            text-align: center;
             margin-top: 40px;
-            padding-top: 20px;
-            border-top: 1px solid var(--border-color);
-            font-size: 0.85rem;
+            font-size: 0.8rem;
             color: var(--text-muted);
         }
 
-        @media (max-width: 600px) {
-            .container {
-                padding: 20px;
-            }
-            body {
-                padding: 20px 10px;
-            }
+        /* SVG Icons */
+        .icon {
+            display: inline-block;
+            width: 1em;
+            height: 1em;
+            stroke-width: 0;
+            stroke: currentColor;
+            fill: currentColor;
         }
     </style>
 </head>
 <body>
     <div class="container">
         <header>
-            <div class="logo">Castelle</div>
-            <h1>Gizlilik Politikası</h1>
-            <p class="last-updated">Son Güncelleme: 13 Temmuz 2026</p>
+            <div class="logo-container">
+                <!-- Premium Gold Star / Crown Like Logo Icon -->
+                <svg class="logo-svg" viewBox="0 0 24 24">
+                    <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
+                </svg>
+            </div>
+            <div class="brand-name">Castelle</div>
+            <p class="subtitle">Premium Casting Platform</p>
+            <p style="font-size: 0.85rem; color: var(--text-muted);">Yasal Bilgilendirmeler, Sözleşmeler ve Kullanıcı Politikaları Portalı</p>
         </header>
 
-        <main>
-            <section>
-                <h2>1. Giriş</h2>
-                <p>Castelle mobil uygulaması ("Uygulama") olarak, kullanıcılarımızın gizliliğine ve kişisel verilerinin korunmasına büyük önem veriyoruz. Bu Gizlilik Politikası, uygulamamızı kullandığınızda hangi verileri topladığımızı, bu verileri nasıl kullandığımızı ve verilerinizin güvenliğini nasıl sağladığımızı açıklamaktadır.</p>
-            </section>
+        <div class="divider"></div>
 
-            <section>
-                <h2>2. Toplanan Veriler</h2>
-                <p>Uygulamamızı kullanırken aşağıdaki kategorilerdeki kişisel verileri toplayabiliriz:</p>
-                <ul>
-                    <li><strong>Hesap ve Profil Bilgileri:</strong> Ad-soyad, e-posta adresi, telefon numarası, profil resmi, kullanıcı rolü (oyuncu, yönetmen, iş veren, moderatör) ve şifre.</li>
-                    <li><strong>Oyuncu Profil Bilgileri:</strong> Fiziksel özellikler, yetenekler (skills), deneyimler, fotoğraflar ve başvuru videoları (audition kayıtları).</li>
-                    <li><strong>İletişim ve Sohbet Verileri:</strong> Uygulama içi sohbet özelliği aracılığıyla gönderilen mesajlar, takvim planları ve bildirimler.</li>
-                    <li><strong>Medya Verileri:</strong> Profilinize veya audition başvurularınıza kendi isteğinizle yüklediğiniz video ve fotoğraflar.</li>
-                </ul>
-            </section>
+        <div class="links-grid">
+            <!-- Gizlilik Politikası -->
+            <a href="privacy.html" class="policy-card">
+                <div>
+                    <h3>
+                        <svg viewBox="0 0 24 24"><path d="M18 8H17V6C17 3.24 14.76 1 12 1S7 3.24 7 6V8H6C4.9 8 4 8.9 4 10V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V10C20 8.9 19.1 8 18 8ZM12 17C10.9 17 10 16.1 10 15S10.9 13 12 13 14 13.9 14 15 13.1 17 12 17ZM15.1 8H8.9V6C8.9 4.29 10.29 2.9 12 2.9C13.71 2.9 15.1 4.29 15.1 6V8Z"/></svg>
+                        Gizlilik Politikası
+                    </h3>
+                    <p>Verilerinizin nasıl toplandığı, korunduğu ve işlendiği hakkında detaylı bilgi edinin.</p>
+                </div>
+                <span class="arrow">Oku &rarr;</span>
+            </a>
 
-            <section>
-                <h2>3. Verilerin Kullanım Amaçları</h2>
-                <p>Topladığımız kişisel verileri aşağıdaki amaçlar doğrultusunda kullanıyoruz:</p>
-                <ul>
-                    <li>Uygulama hizmetlerimizin ve temel fonksiyonlarının (profil oluşturma, audition başvurusu, iş atamaları vb.) sağlanması.</li>
-                    <li>Oyuncular ile iş veren/yönetmenlerin uygulama içinde iletişim kurabilmesi (sohbet ve takvim entegrasyonu).</li>
-                    <li>Uygulama içi bildirimlerin iletilmesi.</li>
-                    <li>Kullanıcı deneyiminin iyileştirilmesi, teknik sorunların giderilmesi ve sistem güvenliğinin sağlanması.</li>
-                </ul>
-            </section>
+            <!-- Kullanım Koşulları -->
+            <a href="terms.html" class="policy-card">
+                <div>
+                    <h3>
+                        <svg viewBox="0 0 24 24"><path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2ZM16 18H8V16H16V18ZM16 14H8V12H16V14ZM13 9V3.5L18.5 9H13Z"/></svg>
+                        Kullanım Koşulları
+                    </h3>
+                    <p>Castelle platformunu kullanırken uymanız gereken kurallar, haklarınız ve sorumluluklarınız.</p>
+                </div>
+                <span class="arrow">Oku &rarr;</span>
+            </a>
 
-            <section>
-                <h2>4. Veri Paylaşımı ve Aktarımı</h2>
-                <p>Kişisel verileriniz, yasal zorunluluklar veya açık rızanız haricinde üçüncü şahıslarla paylaşılmaz. Uygulamamızın altyapısı güvenli bulut servis sağlayıcısı olan Google Firebase (Firestore, Authentication, Storage, Hosting) üzerinde barındırılmaktadır. Verileriniz, Firebase'in yüksek güvenlikli sunucularında saklanmaktadır.</p>
-            </section>
+            <!-- KVKK Aydınlatma Metni -->
+            <a href="kvkk.html" class="policy-card">
+                <div>
+                    <h3>
+                        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12S6.48 22 12 22 22 17.52 22 12 17.52 2 12 2ZM11 7H13V9H11V7ZM11 11H13V17H11V11Z"/></svg>
+                        KVKK Aydınlatma Metni
+                    </h3>
+                    <p>6698 sayılı Kişisel Verilerin Korunması Kanunu kapsamındaki haklarınız ve bilgilendirmeler.</p>
+                </div>
+                <span class="arrow">Oku &rarr;</span>
+            </a>
 
-            <section>
-                <h2>5. Veri Güvenliği</h2>
-                <p>Kişisel verilerinizin güvenliğini sağlamak için endüstri standardı şifreleme yöntemleri, yetkilendirme kuralları (Firestore Security Rules) ve güvenlik protokolleri uygulamaktayız. Ancak internet üzerinden yapılan hiçbir aktarımın %100 güvenli olduğu garanti edilemez.</p>
-            </section>
+            <!-- Çerez Politikası -->
+            <a href="cookies.html" class="policy-card">
+                <div>
+                    <h3>
+                        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12C2 13.66 3.34 15 5 15C5.55 15 6 15.45 6 16C6 17.66 7.34 19 9 19C9.55 19 10 19.45 10 20C10 21.66 11.34 23 13 23C18.52 23 23 18.52 23 13C23 6.93 18.07 2 12 2ZM6 10.5C5.17 10.5 4.5 9.83 4.5 9C4.5 8.17 5.17 7.5 6 7.5C6.83 7.5 7.5 8.17 7.5 9C7.5 9.83 6.83 10.5 6 10.5ZM10.5 6C9.67 6 9 5.33 9 4.5C9 3.67 9.67 3 10.5 3C11.33 3 12 3.67 12 4.5C12 5.33 11.33 6 10.5 6ZM14.5 20.5C13.67 20.5 13 19.83 13 19C13 18.17 13.67 17.5 14.5 17.5C15.33 17.5 16 18.17 16 19C16 19.83 15.33 20.5 14.5 20.5ZM18.5 12C17.67 12 17 11.33 17 10.5C17 9.67 17.67 9 18.5 9C19.33 9 20 9.67 20 10.5C20 11.33 19.33 12 18.5 12Z"/></svg>
+                        Çerez Politikası
+                    </h3>
+                    <p>Deneyiminizi geliştirmek için kullandığımız çerezler ve yönetim seçenekleriniz.</p>
+                </div>
+                <span class="arrow">Oku &rarr;</span>
+            </a>
 
-            <section>
-                <h2>6. Kullanıcı Hakları</h2>
-                <p>Kişisel verilerinize erişme, güncelleme, silinmesini talep etme veya verilerinizin işlenmesine itiraz etme haklarına sahipsiniz. Bu taleplerinizi aşağıdaki iletişim adresimiz üzerinden bize iletebilirsiniz.</p>
-            </section>
+            <!-- Hesap Silme Talebi -->
+            <a href="delete-account.html" class="policy-card colspan-2">
+                <div>
+                    <h3>
+                        <svg viewBox="0 0 24 24"><path d="M6 19C6 20.1 6.9 21 8 21H16C17.1 21 18 20.1 18 19V7H6V19ZM8 9H16V19H8V9ZM15.5 4L14.5 3H9.5L8.5 4H5V6H19V4H15.5Z"/></svg>
+                        Hesap Silme Talebi
+                    </h3>
+                    <p>Castelle hesabınızı ve hesabınıza bağlı tüm kişisel verileri kalıcı olarak silmek istiyorsanız yönergeleri izleyin.</p>
+                </div>
+                <span class="arrow">Hesabımı Sil &rarr;</span>
+            </a>
+        </div>
 
-            <section>
-                <h2>7. İletişim</h2>
-                <p>Bu Gizlilik Politikası ile ilgili herhangi bir sorunuz veya talebiniz olması durumunda bizimle iletişime geçebilirsiniz:</p>
-                <p><strong>E-posta:</strong> <a href="mailto:casttelleyazilim@gmail.com">casttelleyazilim@gmail.com</a></p>
-            </section>
-        </main>
+        <div class="divider"></div>
 
         <footer>
             <p>&copy; 2026 Castelle. Tüm Hakları Saklıdır.</p>
+            <p style="margin-top: 5px; font-size: 0.75rem;">Destek ve İletişim: <a href="mailto:casttelleyazilim@gmail.com" style="color: var(--accent-color); text-decoration: none;">casttelleyazilim@gmail.com</a></p>
         </footer>
     </div>
 </body>
