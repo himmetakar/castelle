@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:castelle/core/models/user_model.dart';
 import 'package:castelle/core/constants/app_constants.dart';
 import 'package:castelle/core/constants/user_roles.dart';
@@ -10,6 +11,7 @@ import 'package:castelle/core/constants/user_roles.dart';
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final GoogleSignIn _googleSignIn = GoogleSignIn();
 
   // Current Firebase User
   User? get currentUser => _auth.currentUser;
@@ -150,6 +152,67 @@ class AuthService {
     }
   }
 
+  /// Google ile Giriş/Kayıt
+  Future<UserModel> signInWithGoogle() async {
+    try {
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      if (googleUser == null) {
+        throw Exception('Google giriş işlemi iptal edildi.');
+      }
+
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final OAuthCredential credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      final UserCredential userCredential =
+          await _auth.signInWithCredential(credential);
+      final User? user = userCredential.user;
+      if (user == null) {
+        throw Exception('Firebase Google kimlik doğrulaması başarısız.');
+      }
+
+      // Firestore'da kullanıcının dokümanı var mı kontrol et
+      final doc = await _firestore
+          .collection(AppConstants.usersCollection)
+          .doc(user.uid)
+          .get();
+
+      if (doc.exists) {
+        return UserModel.fromMap(doc.data()!, user.uid);
+      } else {
+        // Firestore dokümanı yoksa varsayılan olarak 'actor' (oyuncu) rolüyle oluştur
+        final userModel = UserModel(
+          uid: user.uid,
+          email: user.email ?? '',
+          fullName: user.displayName ?? 'Google Kullanıcısı',
+          phone: '',
+          role: UserRole.actor,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
+
+        await _firestore
+            .collection(AppConstants.usersCollection)
+            .doc(user.uid)
+            .set({
+          ...userModel.toMap(),
+          'isActive': true,
+          'approvalStatus': 'pending', // Oyuncu kayıtları admin onayı bekler
+          'approvedAt': null,
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        return userModel;
+      }
+    } on FirebaseAuthException catch (e) {
+      throw _handleAuthError(e);
+    } catch (e) {
+      throw Exception('Google ile giriş başarısız: $e');
+    }
+  }
+
   /// Firestore'dan kullanıcı verisini al
   Future<UserModel> getUserData(String uid) async {
     final doc = await _firestore
@@ -214,7 +277,12 @@ class AuthService {
 
   /// Firebase Auth Hata İşleme (Türkçe)
   Exception _handleAuthError(FirebaseAuthException e) {
+    if (e.message != null && e.message!.contains('CONFIGURATION_NOT_FOUND')) {
+      return Exception('Firebase Console\'da E-posta/Şifre giriş yöntemi etkinleştirilmemiş. Lütfen Firebase Console -> Authentication -> Sign-in method altından E-posta/Şifre seçeneğini etkinleştirin.');
+    }
     switch (e.code) {
+      case 'configuration-not-found':
+        return Exception('Firebase Console\'da E-posta/Şifre giriş yöntemi etkinleştirilmemiş. Lütfen Firebase Console -> Authentication -> Sign-in method altından E-posta/Şifre seçeneğini etkinleştirin.');
       case 'email-already-in-use':
         return Exception('Bu e-posta adresi zaten kullanımda.');
       case 'invalid-email':

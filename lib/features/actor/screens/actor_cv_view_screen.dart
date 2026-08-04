@@ -3607,6 +3607,7 @@ class _ProfileInlineVideoPlayerState extends State<_ProfileInlineVideoPlayer> {
       ),
     );
   }
+}
 
   void _showActorSettingsBottomSheet(BuildContext context) {
     showModalBottomSheet(
@@ -3825,4 +3826,3 @@ class _ProfileInlineVideoPlayerState extends State<_ProfileInlineVideoPlayer> {
       ),
     );
   }
-}

@@ -431,6 +431,63 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           .animate()
                           .fadeIn(delay: 700.ms)
                           .slideY(begin: 0.2, duration: 500.ms),
+
+                      const SizedBox(height: 12),
+
+                      // Google ile Giriş/Kayıt
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: OutlinedButton(
+                          onPressed: authProvider.isLoading
+                              ? null
+                              : () async {
+                                  final success = await authProvider.signInWithGoogle();
+                                  if (success && mounted) {
+                                    // GoRouter will handle redirection
+                                  } else if (!success && mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(authProvider.errorMessage ?? 'Google ile kayıt başarısız.'),
+                                        backgroundColor: AppTheme.error,
+                                      ),
+                                    );
+                                  }
+                                },
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            backgroundColor: Colors.transparent,
+                            side: const BorderSide(color: Color(0xFF4B5563), width: 1),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Image.network(
+                                'https://www.gstatic.com/images/branding/product/2x/googleg_64dp.png',
+                                height: 20,
+                                width: 20,
+                                errorBuilder: (context, error, stackTrace) => const Icon(
+                                  Icons.g_mobiledata_rounded,
+                                  color: Colors.red,
+                                  size: 24,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                'Google ile Kayıt Ol / Giriş Yap',
+                                style: GoogleFonts.inter(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ).animate().fadeIn(delay: 720.ms).slideY(begin: 0.2, duration: 500.ms),
                     ],
                   ),
                 ),

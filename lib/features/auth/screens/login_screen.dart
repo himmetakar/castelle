@@ -413,170 +413,67 @@ class _LoginScreenState extends State<LoginScreen> {
                                       ),
                                     ),
                                   ).animate().fadeIn(delay: 600.ms).slideY(begin: 0.1),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 24),
 
-                            // Divider: veya hızlı giriş
-                            Row(
-                              children: [
-                                const Expanded(
-                                  child: Divider(
-                                    color: Color(0xFFE5E7EB),
-                                    thickness: 1,
-                                  ),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                                  child: Text(
-                                    'veya hızlı giriş',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 12,
-                                      color: const Color(0xFF9CA3AF),
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                                const Expanded(
-                                  child: Divider(
-                                    color: Color(0xFFE5E7EB),
-                                    thickness: 1,
-                                  ),
-                                ),
-                              ],
-                            ).animate().fadeIn(delay: 650.ms),
-                            const SizedBox(height: 16),
+                                  const SizedBox(height: 12),
 
-                            // Grid of Demo Logins
-                            GridView.count(
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              crossAxisCount: 2,
-                              crossAxisSpacing: 10,
-                              mainAxisSpacing: 10,
-                              childAspectRatio: 2.7,
-                              children: UserRole.values.map((role) {
-                                IconData roleIcon;
-                                switch (role) {
-                                  case UserRole.admin:
-                                    roleIcon = Icons.admin_panel_settings_outlined;
-                                    break;
-                                  case UserRole.moderator:
-                                    roleIcon = Icons.gavel_outlined;
-                                    break;
-                                  case UserRole.actor:
-                                    roleIcon = Icons.theater_comedy_outlined;
-                                    break;
-                                }
-
-                                return Material(
-                                  color: Colors.white,
-                                  child: InkWell(
-                                    onTap: authProvider.isLoading
-                                        ? null
-                                        : () => _handleDemoLogin(role),
-                                    borderRadius: BorderRadius.circular(10),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                                      decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(10),
-                                        border: Border.all(
-                                          color: const Color(0xFFE5E7EB),
-                                          width: 1,
+                                  // Google ile Giriş Yap Butonu
+                                  SizedBox(
+                                    width: double.infinity,
+                                    height: 50,
+                                    child: OutlinedButton(
+                                      onPressed: authProvider.isLoading
+                                          ? null
+                                          : () async {
+                                              final success = await authProvider.signInWithGoogle();
+                                              if (success && mounted) {
+                                                // GoRouter will handle redirection
+                                              } else if (!success && mounted) {
+                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                  SnackBar(
+                                                    content: Text(authProvider.errorMessage ?? 'Google ile giriş başarısız.'),
+                                                    backgroundColor: AppTheme.error,
+                                                  ),
+                                                );
+                                              }
+                                            },
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: const Color(0xFF374151),
+                                        backgroundColor: Colors.white,
+                                        side: const BorderSide(color: Color(0xFFD1D5DB), width: 1),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(10),
                                         ),
                                       ),
                                       child: Row(
                                         mainAxisAlignment: MainAxisAlignment.center,
                                         children: [
-                                          Icon(
-                                            roleIcon,
-                                            size: 16,
-                                            color: AppTheme.primary,
+                                          Image.network(
+                                            'https://www.gstatic.com/images/branding/product/2x/googleg_64dp.png',
+                                            height: 20,
+                                            width: 20,
+                                            errorBuilder: (context, error, stackTrace) => const Icon(
+                                              Icons.g_mobiledata_rounded,
+                                              color: Colors.red,
+                                              size: 24,
+                                            ),
                                           ),
-                                          const SizedBox(width: 8),
-                                          Flexible(
-                                            child: Text(
-                                              role.displayName,
-                                              style: GoogleFonts.inter(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w600,
-                                                color: const Color(0xFF374151),
-                                              ),
-                                              overflow: TextOverflow.ellipsis,
+                                          const SizedBox(width: 12),
+                                          Text(
+                                            'Google ile Giriş Yap',
+                                            style: GoogleFonts.inter(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w600,
+                                              color: const Color(0xFF374151),
                                             ),
                                           ),
                                         ],
                                       ),
                                     ),
-                                  ),
-                                );
-                              }).toList(),
-                            ).animate().fadeIn(delay: 700.ms),
-
-                            const SizedBox(height: 12),
-
-                            // Moderatör Demo Girişleri
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 8),
-                                  child: Text(
-                                    '🛡️ Moderatör Demo Girişleri',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: const Color(0xFF6B7280),
-                                      letterSpacing: 0.3,
-                                    ),
-                                  ),
-                                ),
-                                _ModeratorDemoButton(
-                                  name: 'Merve Çelik',
-                                  email: 'merve@example.com',
-                                  initials: 'MÇ',
-                                  approvalMode: 'Admin Onayı',
-                                  isLoading: authProvider.isLoading,
-                                  onTap: () async {
-                                    final success = await authProvider.signIn(
-                                      email: 'merve@example.com',
-                                      password: AuthProvider.demoPassword,
-                                    );
-                                    if (!success && context.mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(
-                                          content: Text(authProvider.errorMessage ?? 'Demo giriş başarısız.'),
-                                          backgroundColor: AppTheme.error,
-                                        ),
-                                      );
-                                    }
-                                  },
-                                ),
-                                const SizedBox(height: 8),
-                                _ModeratorDemoButton(
-                                  name: 'Burak Öztürk',
-                                  email: 'burak@example.com',
-                                  initials: 'BÖ',
-                                  approvalMode: 'Otomatik Onay',
-                                  isLoading: authProvider.isLoading,
-                                  onTap: () async {
-                                    final success = await authProvider.signIn(
-                                      email: 'burak@example.com',
-                                      password: AuthProvider.demoPassword,
-                                    );
-                                    if (!success && context.mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(
-                                          content: Text(authProvider.errorMessage ?? 'Demo giriş başarısız.'),
-                                          backgroundColor: AppTheme.error,
-                                        ),
-                                      );
-                                    }
-                                  },
-                                ),
-                              ],
-                            ).animate().fadeIn(delay: 720.ms),
+                                  ).animate().fadeIn(delay: 620.ms).slideY(begin: 0.1),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 24),
 
 
                             // Footer Link (Sign Up)

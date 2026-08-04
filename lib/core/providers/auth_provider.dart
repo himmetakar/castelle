@@ -4,6 +4,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:castelle/core/models/user_model.dart';
 import 'package:castelle/core/services/auth_service.dart';
 import 'package:castelle/core/constants/user_roles.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
 
 /// Castelle - Auth Provider
 /// Kimlik doğrulama durumu yönetimi
@@ -294,16 +296,6 @@ class AuthProvider extends ChangeNotifier {
     _status = AuthStatus.loading;
     notifyListeners();
 
-    // Arka planda demo hesapları oluştur (bloklamaz)
-    seedDemoAccounts().catchError((e) {
-      debugPrint('⚠️ [AuthProvider] seed error: $e');
-    });
-
-    // Arka planda 8 oyuncu hesabı oluştur/güncelle (bloklamaz)
-    seedMockActors().catchError((e) {
-      debugPrint('⚠️ [AuthProvider] actor seed error: $e');
-    });
-
     try {
       final prefs = await SharedPreferences.getInstance();
       final isLoggedIn = prefs.getBool('is_logged_in') ?? false;
@@ -381,6 +373,29 @@ class AuthProvider extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('is_logged_in', true);
       
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _status = AuthStatus.error;
+      _errorMessage = e.toString().replaceAll('Exception: ', '');
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Google ile Giriş / Kayıt
+  Future<bool> signInWithGoogle() async {
+    _status = AuthStatus.loading;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      _user = await _authService.signInWithGoogle();
+      _status = AuthStatus.authenticated;
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('is_logged_in', true);
+
       notifyListeners();
       return true;
     } catch (e) {

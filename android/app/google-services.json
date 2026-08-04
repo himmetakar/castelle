@@ -12,7 +12,36 @@
           "package_name": "com.castelleapp.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "977939722051-470n6k2qg9rik061if4s3m409gfsk3gk.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.castelleapp.app",
+            "certificate_hash": "c8cc23f8f6bdab115043e42541c9e2e756c4e2cc"
+          }
+        },
+        {
+          "client_id": "977939722051-cutrh2taqk09s85p1vrpm5evq0cr9pt3.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.castelleapp.app",
+            "certificate_hash": "bca35fc27a163f6eb77434033c3375b6457e1b61"
+          }
+        },
+        {
+          "client_id": "977939722051-suhb3l34hqchl4e381sl7p6gkcfmpp56.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.castelleapp.app",
+            "certificate_hash": "e905a98167819251e4cbbd0844914bbe65c06df9"
+          }
+        },
+        {
+          "client_id": "977939722051-78bh3stbhgh85rsub18ra2c0566l1gq7.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyCWojyTDMo7dMFF5xQrQOkRfNSjcbooIMg"
@@ -20,7 +49,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "977939722051-78bh3stbhgh85rsub18ra2c0566l1gq7.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "977939722051-vskf7va7k1ncaj3s057fdl9l08rff8b4.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.castelleapp.app"
+              }
+            }
+          ]
         }
       }
     }
