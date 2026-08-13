@@ -93,7 +93,7 @@ class _ActorHomeScreenState extends State<ActorHomeScreen> {
                 ),
                 const SizedBox(height: 24),
                 Text(
-                  'Başvurunuz Onaylanmadı',
+                  'Üyeliğiniz Donduruldu',
                   style: GoogleFonts.outfit(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
@@ -103,7 +103,7 @@ class _ActorHomeScreenState extends State<ActorHomeScreen> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Castelle üyelik başvurunuz yöneticilerimiz tarafından yapılan inceleme sonucunda onaylanmamıştır.',
+                  'Castelle üyelik haklarınız yönetici tarafından dondurulmuştur. Detaylar ve üyelik aktivasyonu için ajans yönetimi ile iletişime geçebilirsiniz.',
                   style: GoogleFonts.inter(
                     fontSize: 14,
                     color: AppTheme.textSecondary,
@@ -178,7 +178,7 @@ class _ActorHomeScreenState extends State<ActorHomeScreen> {
       );
     }
 
-    final isApproved = profile.approvalStatus == 'approved';
+    final isApproved = profile.approvalStatus != 'rejected';
 
     final tabs = [
       const AppShellTab(
@@ -683,7 +683,7 @@ class _ActorDashboardState extends State<_ActorDashboard> {
     final profileProvider = context.watch<ActorProfileProvider>();
     final profile = profileProvider.profile;
     final completion = profileProvider.completionPercentage;
-    final isApproved = profile?.approvalStatus == 'approved';
+    final isApproved = profile?.approvalStatus != 'rejected';
 
     final auditionProvider = context.watch<AuditionProvider>();
     final auditions = auditionProvider.auditions;
@@ -750,84 +750,6 @@ class _ActorDashboardState extends State<_ActorDashboard> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // ─── Admin Onay Bekliyor Banner ───
-                      if (profile?.approvalStatus == 'pending') ...[
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: AppTheme.warning.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                            border: Border.all(
-                                color: AppTheme.warning.withValues(alpha: 0.35)),
-                          ),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Icon(Icons.hourglass_top_rounded,
-                                  color: AppTheme.warning, size: 20),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Profiliniz İnceleniyor',
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w700,
-                                        color: AppTheme.warning,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Profiliniz yönetici onayından sonra aktif olacak ve tüm özelliklere erişebileceksiniz.',
-                                      style: GoogleFonts.inter(
-                                        fontSize: 12.5,
-                                        color: AppTheme.textSecondary,
-                                        height: 1.4,
-                                      ),
-                                    ),
-                                    if (profile?.adminNote != null &&
-                                        profile!.adminNote!.isNotEmpty) ...[
-                                      const SizedBox(height: 8),
-                                      Container(
-                                        padding: const EdgeInsets.all(10),
-                                        decoration: BoxDecoration(
-                                          color: AppTheme.info
-                                              .withValues(alpha: 0.08),
-                                          borderRadius: BorderRadius.circular(8),
-                                          border: Border.all(
-                                              color: AppTheme.info
-                                                  .withValues(alpha: 0.25)),
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            const Icon(Icons.info_outline,
-                                                size: 13, color: AppTheme.info),
-                                            const SizedBox(width: 6),
-                                            Expanded(
-                                              child: Text(
-                                                '📝 Yönetici notu: ${profile.adminNote}',
-                                                style: GoogleFonts.inter(
-                                                  fontSize: 12,
-                                                  color: AppTheme.info,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ).animate().fadeIn(delay: 400.ms).slideY(begin: -0.05),
-                        const SizedBox(height: 14),
-                      ],
-
                       // Profil tamamlama kartı
                       if (_showProfileCard) ...[
 

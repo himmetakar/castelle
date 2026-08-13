@@ -162,22 +162,64 @@ class PolicyDialogs {
       context: context,
       title: 'KVKK Aydınlatma Metni',
       content: [
-        _buildParagraph('Son Güncelleme: 31 Temmuz 2026'),
-        _buildParagraph('6698 sayılı Kişisel Verilerin Korunması Kanunu ("KVKK") uyarınca, kişisel verileriniz veri sorumlusu sıfatıyla Castelle tarafından aşağıda açıklanan kapsamda işlenebilecektir.'),
+        _buildParagraph('Son Güncelleme Tarihi: 13 Ağustos 2026'),
+        _buildSectionTitle('1. Veri Sorumlusu'),
+        _buildParagraph('6698 sayılı KVKK kapsamında veri sorumlusu: Castel TV Medya Creative Ajans Hizmetleri Ltd. Şti.\nAdres: Cemal Sururi Sokak, Gülbahar Mah. Halim Meriç İş Merkezi No: 15E, K: 5, D: 28, Mecidiyeköy, İstanbul\nE-posta: alicokartal@castelmedya.tv | Tel: 0533 817 03 79'),
         
-        _buildSectionTitle('1. Kişisel Verilerinizin İşlenme Amacı'),
-        _buildParagraph('Kişisel verileriniz, Castelle tarafından sunulan casting platform hizmetlerinin yürütülmesi, oyuncular ile iş veren/yönetmenlerin buluşturulması, audition kayıtlarının alınması, sözleşme süreçlerinin takibi ve yasal yükümlülüklerin yerine getirilmesi amacıyla işlenmektedir.'),
+        _buildSectionTitle('2. Castelle Nedir?'),
+        _buildParagraph('Castelle; oyuncuların projeleri görüntüleyebildiği, profillerini oluşturup başvurabildiği ve deneme çekimlerine katılabildiği dijital bir platformdur.'),
         
-        _buildSectionTitle('2. İşlenen Kişisel Veriler'),
-        _buildBulletItem('Kimlik ve iletişim bilgileri (Ad-soyad, telefon, e-posta)'),
-        _buildBulletItem('Mesleki ve fiziksel nitelik bilgileri (yaş, boy, kilo, yetenekler, eğitim vb.)'),
-        _buildBulletItem('Görsel ve işitsel kayıtlar (fotoğraflar, tanıtım ve audition videoları)'),
-        
-        _buildSectionTitle('3. İşlenen Kişisel Verilerin Aktarılması'),
-        _buildParagraph('Kişisel verileriniz, yalnızca casting süreçlerinin yürütülmesi amacıyla platformdaki kayıtlı ve onaylı İş Veren/Yönetmen kullanıcılar ile ve bulut hizmet sağlayıcımız olan Google Firebase sunucularıyla paylaşılabilmektedir.'),
-        
-        _buildSectionTitle('4. KVKK Kapsamındaki Haklarınız'),
-        _buildParagraph('Kanun\'un 11. maddesi uyarınca veri sahipleri kişisel verilerinin silinmesini veya düzeltilmesini talep etme hakkına sahiptir. Bu taleplerinizi casttelleyazilim@gmail.com adresine iletebilirsiniz.'),
+        _buildSectionTitle('3. İşlenen Kişisel Veriler'),
+        _buildBulletItem('Kimlik & İletişim: Ad-soyad, doğum tarihi, tel, e-posta, şehir.'),
+        _buildBulletItem('Oyunculuk & Mesleki: Deneyim, eğitim, yetenekler, dil, fiziksel özellikler, CV, showreel, fotoğraflar, videolar.'),
+        _buildBulletItem('Görüntü & Ses: Deneme çekimleri, video içerikleri, ses kayıtları.'),
+        _buildBulletItem('Platform & Proje: Başvurular, deneme çekimleri, yönetmen görüşmeleri, opsiyon ve takvim bilgileri.'),
+        _buildBulletItem('Teknik & Konum: IP, cihaz, log, oturum ve izinli konum verileri.'),
+
+        _buildSectionTitle('4. Kişisel Verilerin İşlenme Amaçları'),
+        _buildParagraph('Hesap yönetimi, oyuncu profil/portföyü oluşturma, projelere başvuru sağlama, audition değerlendirmesi, yapımcı/yönetmen erişimi sağlama, bilgi güvenliği ve yasal yükümlülüklerin yerine getirilmesi amaçlarıyla işlenir.'),
+
+        _buildSectionTitle('5. Hukuki Sebepler'),
+        _buildParagraph('Kanunlarda öngörülmesi, sözleşmenin ifası, veri sorumlusunun hukuki yükümlülüğü ve meşru menfaati ile açık rızanız doğrultusunda işlenmektedir.'),
+
+        _buildSectionTitle('6. Fotoğraf, Video ve Deneme Çekimleri'),
+        _buildParagraph('Yüklenen fotoğraf, video, showreel ve deneme çekimleri başvurulan projelerin değerlendirilmesi amacıyla yapımcı ve yönetmenlerle paylaşılabilir.'),
+
+        _buildSectionTitle('7. Kamera, Mikrofon ve Konum İzinleri'),
+        _buildParagraph('Deneme çekimleri ve konum tabanlı özellikler için cihaz izinleri talep edilir; işletim sisteminizden yönetilebilir.'),
+
+        _buildSectionTitle('8. Kişisel Verilerin Aktarılması'),
+        _buildParagraph('Proje sahipleri, yapımcılar, yönetmenler, teknik hizmet sağlayıcılar ve Google Firebase altyapısı (yurt dışı aktarımı dahil) ile KVKK\'ya uygun olarak paylaşılabilir.'),
+
+        _buildSectionTitle('9. Saklama Süresi & Güvenlik'),
+        _buildParagraph('Verileriniz işleme amaçlarının ve yasal sürelerin gerektirdiği süre boyunca teknik ve idari tedbirlerle muhafaza edilir.'),
+
+        _buildSectionTitle('10. Haklarınız'),
+        _buildParagraph('KVKK Madde 11 kapsamındaki haklarınız için alicokartal@castelmedya.tv adresine başvurabilirsiniz.'),
+      ],
+    );
+  }
+
+  /// Açık Rıza Metni
+  static void showExplicitConsent(BuildContext context) {
+    _showPolicyDialog(
+      context: context,
+      title: 'Açık Rıza Metni',
+      content: [
+        _buildParagraph('Son Güncelleme Tarihi: 13 Ağustos 2026'),
+        _buildParagraph('Castelle tarafından sunulan Aydınlatma Metni\'ni okuduğumu ve bilgilendirildiğimi kabul ediyorum.'),
+
+        _buildSectionTitle('1. Fotoğraf ve Görsel İçeriklerin Kullanılması'),
+        _buildParagraph('Yüklediğim fotoğraf, portre, tanıtım videosu, showreel ve benzeri içeriklerin oyunculuk projelerinde değerlendirilmek üzere yapımcı, yönetmen ve yetkili sektör profesyonelleriyle paylaşılmasına açık rıza veriyorum.'),
+
+        _buildSectionTitle('2. Deneme Çekimlerinin Paylaşılması'),
+        _buildParagraph('Gerçekleştirdiğim deneme çekimlerinin başvurduğum projelerin oyuncu seçme süreçlerinde kullanılmak ve ilgili yetkili kişilerle paylaşılmak üzere işlenmesine açık rıza veriyorum.'),
+
+        _buildSectionTitle('3. Tanıtım ve Pazarlama Amaçlı Kullanım (İsteğe Bağlı)'),
+        _buildParagraph('Castelle tarafından hazırlanan tanıtım, reklam, sosyal medya ve pazarlama çalışmalarında fotoğraf, video veya profil bilgilerimin kullanılmasına açık rıza veriyorum.'),
+
+        _buildSectionTitle('Rızanın Geri Alınması'),
+        _buildParagraph('Verdiğim açık rızayı dilediğim zaman geri çekebileceğimi biliyorum.'),
       ],
     );
   }

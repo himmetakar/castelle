@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Açık Rıza Metni | Castelle</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #05070a;
+            --surface-color: #0e121a;
+            --surface-card: #141a24;
+            --accent-color: #c5a059;
+            --accent-hover: #e5be79;
+            --text-primary: #ffffff;
+            --text-secondary: #c5ced6;
+            --text-muted: #8b9bb4;
+            --border-color: rgba(197, 160, 89, 0.15);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-secondary);
+            line-height: 1.6;
+            padding: 40px 20px;
+            background-image: radial-gradient(circle at 10% 20%, rgba(197, 160, 89, 0.04) 0%, transparent 40%),
+                              radial-gradient(circle at 90% 80%, rgba(197, 160, 89, 0.02) 0%, transparent 50%);
+        }
+
+        .container {
+            max-width: 850px;
+            margin: 0 auto;
+            background-color: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        .back-btn {
+            display: inline-flex;
+            align-items: center;
+            color: var(--accent-color);
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.9rem;
+            margin-bottom: 20px;
+            transition: transform 0.2s;
+        }
+
+        .back-btn:hover {
+            transform: translateX(-4px);
+            color: var(--accent-hover);
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 30px;
+        }
+
+        .logo {
+            font-family: 'Outfit', sans-serif;
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--accent-color);
+            letter-spacing: 2px;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
+
+        h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.8rem;
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        .last-updated {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-top: 10px;
+        }
+
+        section {
+            margin-bottom: 30px;
+        }
+
+        h2 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.3rem;
+            color: var(--accent-color);
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+
+        p {
+            margin-bottom: 15px;
+            font-size: 0.95rem;
+            color: var(--text-secondary);
+        }
+
+        .clause-card {
+            background-color: var(--surface-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .clause-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.1rem;
+            color: var(--text-primary);
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .badge-optional {
+            display: inline-block;
+            background-color: rgba(197, 160, 89, 0.15);
+            color: var(--accent-color);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-left: 8px;
+        }
+
+        a {
+            color: var(--accent-color);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        a:hover {
+            color: var(--accent-hover);
+            text-decoration: underline;
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border-color);
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="index.html" class="back-btn">&larr; Anasayfaya Dön</a>
+        <header>
+            <div class="logo">Castelle</div>
+            <h1>Castelle Açık Rıza Metni</h1>
+            <p class="last-updated">Son Güncelleme Tarihi: 13 Ağustos 2026</p>
+        </header>
+
+        <main>
+            <section>
+                <p>Castelle tarafından tarafıma sunulan <strong>Aydınlatma Metni’ni</strong> okuduğumu ve kişisel verilerimin işlenmesine ilişkin bilgilendirildiğimi kabul ediyorum.</p>
+                <p>Aşağıdaki hususlarda verdiğim açık rızanın, Aydınlatma Metni’nden ayrı ve özgür irademle verildiğini kabul ediyorum.</p>
+            </section>
+
+            <div class="clause-card">
+                <div class="clause-title">1. Fotoğraf ve Görsel İçeriklerin Kullanılması</div>
+                <p>Castelle platformuna yüklediğim fotoğraf, portre, tanıtım videosu, showreel ve benzeri içeriklerin, oyunculuk projeleri ve oyuncu seçme süreçlerinde değerlendirilmek üzere ilgili proje sahipleri, yapımcılar, yönetmenler ve yetkili sektor profesyonelleriyle paylaşılmasına açık rıza veriyorum.</p>
+            </div>
+
+            <div class="clause-card">
+                <div class="clause-title">2. Deneme Çekimlerinin Paylaşılması</div>
+                <p>Castelle aracılığıyla gerçekleştirdiğim deneme çekimlerinin, başvurduğum projelerin oyuncu seçme ve değerlendirme süreçlerinde kullanılmak ve ilgili yetkili kişilerle paylaşılmak üzere işlenmesine açık rıza veriyorum.</p>
+            </div>
+
+            <div class="clause-card">
+                <div class="clause-title">
+                    3. Tanıtım ve Pazarlama Amaçlı Kullanım
+                    <span class="badge-optional">İsteğe Bağlı</span>
+                </div>
+                <p>Castelle tarafından hazırlanan tanıtım, reklam, sosyal medya ve pazarlama çalışmalarında fotoğraf, video veya profil bilgilerimin kullanılmasına açık rıza veriyorum.</p>
+                <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 8px;"><em>Not: Bu seçenek zorunlu değildir ve Castelle temel oyunculuk hizmetlerini kullanmanızı engellemez.</em></p>
+            </div>
+
+            <section>
+                <h2>Açık Rızanın Geri Alınması</h2>
+                <p>Verdiğim açık rızayı istediğim zaman geri çekebileceğimi, açık rızamı geri çekmemin, geri çekme tarihinden önce gerçekleştirilen veri işleme faaliyetlerinin hukuka uygunluğunu etkilemeyeceğini biliyorum.</p>
+            </section>
+        </main>
+
+        <footer>
+            <p>&copy; 2026 Castel TV Medya Creative Ajans Hizmetleri Ltd. Şti. Tüm Hakları Saklıdır.</p>
+            <p style="margin-top: 5px; font-size: 0.75rem;">Destek ve İletişim: <a href="mailto:alicokartal@castelmedya.tv">alicokartal@castelmedya.tv</a></p>
+        </footer>
+    </div>
+</body>
+</html>

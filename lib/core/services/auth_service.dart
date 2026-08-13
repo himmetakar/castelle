@@ -2,8 +2,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:castelle/core/models/user_model.dart';
+import 'package:castelle/core/models/notification_model.dart';
 import 'package:castelle/core/constants/app_constants.dart';
 import 'package:castelle/core/constants/user_roles.dart';
+import 'package:castelle/core/services/notification_service.dart';
 
 /// Castelle - Firebase Auth Service
 /// Kimlik doğrulama ve kullanıcı yönetim servisi
@@ -55,12 +57,20 @@ class AuthService {
           .set({
         ...userModel.toMap(),
         'isActive': true,
-        // Oyuncu kayıtları admin onayı bekler
-        if (role == 'actor') ...{
-          'approvalStatus': 'pending',
-          'approvedAt': null,
-        },
+        'approvalStatus': 'approved',
+        'approvedAt': FieldValue.serverTimestamp(),
       });
+
+      // Admin kullanıcılarına yeni üye bildirimi gönder
+      try {
+        final roleLabel = UserRole.fromString(role).displayName;
+        await NotificationService().sendBulkNotification(
+          title: 'Yeni Üye Kaydı 👤',
+          body: '${fullName.trim()} ($roleLabel) platforma yeni kayıt oldu.',
+          type: NotificationType.systemMessage,
+          target: NotificationTarget.admins,
+        );
+      } catch (_) {}
 
       return userModel;
     } on FirebaseAuthException catch (e) {
@@ -155,6 +165,11 @@ class AuthService {
   /// Google ile Giriş/Kayıt
   Future<UserModel> signInWithGoogle() async {
     try {
+      // Her defasında hangi Google hesabı ile giriş yapılacağını sorması için önbellekteki oturumu sıfırla
+      try {
+        await _googleSignIn.signOut();
+      } catch (_) {}
+
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
       if (googleUser == null) {
         throw Exception('Google giriş işlemi iptal edildi.');
@@ -199,11 +214,22 @@ class AuthService {
             .set({
           ...userModel.toMap(),
           'isActive': true,
-          'approvalStatus': 'pending', // Oyuncu kayıtları admin onayı bekler
-          'approvedAt': null,
+          'approvalStatus': 'approved',
+          'approvedAt': FieldValue.serverTimestamp(),
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
+
+        // Admin kullanıcılarına yeni üye bildirimi gönder
+        try {
+          await NotificationService().sendBulkNotification(
+            title: 'Yeni Üye Kaydı (Google) 👤',
+            body: '${user.displayName ?? "Google Kullanıcısı"} (Oyuncu) platforma yeni kayıt oldu.',
+            type: NotificationType.systemMessage,
+            target: NotificationTarget.admins,
+          );
+        } catch (_) {}
+
         return userModel;
       }
     } on FirebaseAuthException catch (e) {

@@ -13,6 +13,7 @@ import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:castelle/core/services/actor_profile_service.dart';
 import 'package:castelle/core/widgets/policy_dialogs.dart';
 import 'package:castelle/core/theme/app_theme.dart';
 import 'package:castelle/core/models/actor_profile_model.dart';
@@ -634,7 +635,19 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
               },
             ),
           ]
-          else if (authProvider.isAdmin || authProvider.isModerator)
+          else if (authProvider.isAdmin || authProvider.isModerator) ...[
+            if (profile.approvalStatus == 'rejected')
+              IconButton(
+                icon: const Icon(Icons.check_circle_outline, color: AppTheme.success),
+                tooltip: 'Üyeliği Aktif Et',
+                onPressed: () => _activateMembership(context, profile),
+              )
+            else
+              IconButton(
+                icon: const Icon(Icons.block, color: AppTheme.error),
+                tooltip: 'Üyelik Haklarını Dondur (Pasife Çek)',
+                onPressed: () => _freezeMembership(context, profile),
+              ),
             IconButton(
               icon: const Icon(Icons.chat_bubble_outline, color: AppTheme.accent),
               onPressed: () {
@@ -649,6 +662,7 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
                 );
               },
             ),
+          ],
         ],
       ),
       body: SingleChildScrollView(
@@ -3410,204 +3424,6 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
       ),
     );
   }
-}
-
-class _PhysicalLabel {
-  final String title;
-  final String value;
-  _PhysicalLabel(this.title, this.value);
-}
-
-/// Profil içi inline video oynatıcı (Chewie ile)
-class _ProfileInlineVideoPlayer extends StatefulWidget {
-  final String videoUrl;
-  final String title;
-
-  const _ProfileInlineVideoPlayer({
-    required this.videoUrl,
-    required this.title,
-  });
-
-  @override
-  State<_ProfileInlineVideoPlayer> createState() => _ProfileInlineVideoPlayerState();
-}
-
-class _ProfileInlineVideoPlayerState extends State<_ProfileInlineVideoPlayer> {
-  VideoPlayerController? _videoPlayerController;
-  ChewieController? _chewieController;
-  bool _isInit = false;
-  bool _isLoading = false;
-  String? _error;
-  bool _isPlaying = false;
-
-  @override
-  void initState() {
-    super.initState();
-    // Sayfa açıldığında ön izleme için videoyu otomatik yükle (oynatmadan)
-    _initPlayer(autoPlay: false);
-  }
-
-  @override
-  void dispose() {
-    _videoPlayerController?.removeListener(_videoListener);
-    _chewieController?.dispose();
-    _videoPlayerController?.dispose();
-    super.dispose();
-  }
-
-  void _videoListener() {
-    if (_videoPlayerController == null) return;
-    final isPlaying = _videoPlayerController!.value.isPlaying;
-    if (isPlaying != _isPlaying) {
-      setState(() {
-        _isPlaying = isPlaying;
-      });
-    }
-  }
-
-  Future<void> _initPlayer({bool autoPlay = false}) async {
-    if (!mounted) return;
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
-
-    try {
-      final isLocal = widget.videoUrl.startsWith('/') ||
-          widget.videoUrl.startsWith('file://') ||
-          widget.videoUrl.contains('/data/') ||
-          widget.videoUrl.contains('/storage/');
-
-      if (isLocal) {
-        final cleanPath = widget.videoUrl.replaceFirst(RegExp(r'^file://'), '');
-        _videoPlayerController = VideoPlayerController.file(File(cleanPath));
-      } else {
-        _videoPlayerController = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
-      }
-
-      await _videoPlayerController!.initialize();
-      _videoPlayerController!.addListener(_videoListener);
-
-      _chewieController = ChewieController(
-        videoPlayerController: _videoPlayerController!,
-        aspectRatio: _videoPlayerController!.value.aspectRatio,
-        autoPlay: autoPlay,
-        looping: false,
-        allowFullScreen: true,
-        materialProgressColors: ChewieProgressColors(
-          playedColor: AppTheme.accent,
-          handleColor: AppTheme.accent,
-          backgroundColor: AppTheme.surfaceElevated,
-          bufferedColor: AppTheme.primary.withValues(alpha: 0.3),
-        ),
-      );
-
-      if (mounted) {
-        setState(() {
-          _isInit = true;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _error = 'Video yüklenemedi: $e';
-        });
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_isInit && _chewieController != null && _videoPlayerController != null) {
-      return AspectRatio(
-        aspectRatio: _videoPlayerController!.value.aspectRatio,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              Chewie(controller: _chewieController!),
-              if (!_isPlaying)
-                GestureDetector(
-                  onTap: () {
-                    _chewieController!.play();
-                  },
-                  child: Container(
-                    color: Colors.black38, // Ön izleme hafif karartma
-                    child: Center(
-                      child: Container(
-                        width: 56,
-                        height: 56,
-                        decoration: BoxDecoration(
-                          color: AppTheme.accent.withValues(alpha: 0.95),
-                          shape: BoxShape.circle,
-                          boxShadow: AppTheme.glowAccent,
-                        ),
-                        child: const Icon(
-                          Icons.play_arrow_rounded,
-                          size: 38,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return Container(
-      width: double.infinity,
-      height: 180,
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceLight,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Center(
-        child: _isLoading
-            ? const CircularProgressIndicator(color: AppTheme.accent)
-            : _error != null
-                ? Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.error_outline, color: AppTheme.error, size: 24),
-                        const SizedBox(height: 6),
-                        Text(
-                          _error!,
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.inter(color: AppTheme.error, fontSize: 12),
-                        ),
-                        TextButton(
-                          onPressed: () => _initPlayer(autoPlay: false),
-                          child: const Text('Tekrar Dene', style: TextStyle(color: AppTheme.accent)),
-                        ),
-                      ],
-                    ),
-                  )
-                : Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.play_circle_fill, size: 48, color: AppTheme.accent),
-                        onPressed: () => _initPlayer(autoPlay: true),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Videoyu Oynat',
-                        style: GoogleFonts.inter(color: AppTheme.textSecondary, fontSize: 13, fontWeight: FontWeight.w500),
-                      ),
-                    ],
-                  ),
-      ),
-    );
-  }
-}
 
   void _showActorSettingsBottomSheet(BuildContext context) {
     showModalBottomSheet(
@@ -3826,3 +3642,325 @@ class _ProfileInlineVideoPlayerState extends State<_ProfileInlineVideoPlayer> {
       ),
     );
   }
+
+  Future<void> _freezeMembership(BuildContext context, ActorProfileModel profile) async {
+    final ctrl = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surfaceCard,
+        title: Text(
+          'Üyelik Haklarını Dondur',
+          style: GoogleFonts.outfit(fontWeight: FontWeight.w600, color: AppTheme.error),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${profile.fullName} kullanıcısının üyelik haklarını dondurmak (pasife almak) istediğinize emin misiniz?\nKullanıcı tekrar aktif edilene kadar projeleri ve audition alanlarını göremeyecektir.',
+              style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textSecondary),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: ctrl,
+              maxLines: 3,
+              maxLength: 200,
+              style: GoogleFonts.inter(fontSize: 14, color: AppTheme.textPrimary),
+              decoration: InputDecoration(
+                hintText: 'Dondurma gerekçesi / Yönetici notu (isteğe bağlı)...',
+                hintStyle: GoogleFonts.inter(fontSize: 12, color: AppTheme.textTertiary),
+                filled: true,
+                fillColor: AppTheme.surfaceLight,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Vazgeç', style: GoogleFonts.inter(color: AppTheme.textTertiary)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Dondur', style: GoogleFonts.outfit(fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      final reason = ctrl.text.trim().isEmpty
+          ? 'Üyelik haklarınız yönetici tarafından dondurulmuştur.'
+          : ctrl.text.trim();
+      await ActorProfileService().rejectActor(profile.uid, reason: reason);
+      await _loadLatestActorProfile();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${profile.fullName} kullanıcısının üyelik hakları donduruldu (pasife alındı).'),
+            backgroundColor: AppTheme.error,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Hata: $e'), backgroundColor: AppTheme.error),
+        );
+      }
+    }
+  }
+
+  Future<void> _activateMembership(BuildContext context, ActorProfileModel profile) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surfaceCard,
+        title: Text(
+          'Üyeliği Aktif Et',
+          style: GoogleFonts.outfit(fontWeight: FontWeight.w600, color: AppTheme.success),
+        ),
+        content: Text(
+          '${profile.fullName} kullanıcısının üyeliğini tekrar aktif etmek istediğinize emin misiniz?',
+          style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Vazgeç', style: GoogleFonts.inter(color: AppTheme.textTertiary)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.success, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Aktif Et', style: GoogleFonts.outfit(fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await ActorProfileService().approveActor(profile.uid);
+      await _loadLatestActorProfile();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${profile.fullName} kullanıcısının üyeliği tekrar aktif edildi ✅'),
+            backgroundColor: AppTheme.success,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Hata: $e'), backgroundColor: AppTheme.error),
+        );
+      }
+    }
+  }
+}
+
+class _PhysicalLabel {
+  final String title;
+  final String value;
+  _PhysicalLabel(this.title, this.value);
+}
+
+/// Profil içi inline video oynatıcı (Chewie ile)
+class _ProfileInlineVideoPlayer extends StatefulWidget {
+  final String videoUrl;
+  final String title;
+
+  const _ProfileInlineVideoPlayer({
+    required this.videoUrl,
+    required this.title,
+  });
+
+  @override
+  State<_ProfileInlineVideoPlayer> createState() => _ProfileInlineVideoPlayerState();
+}
+
+class _ProfileInlineVideoPlayerState extends State<_ProfileInlineVideoPlayer> {
+  VideoPlayerController? _videoPlayerController;
+  ChewieController? _chewieController;
+  bool _isInit = false;
+  bool _isLoading = false;
+  String? _error;
+  bool _isPlaying = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Sayfa açıldığında ön izleme için videoyu otomatik yükle (oynatmadan)
+    _initPlayer(autoPlay: false);
+  }
+
+  @override
+  void dispose() {
+    _videoPlayerController?.removeListener(_videoListener);
+    _chewieController?.dispose();
+    _videoPlayerController?.dispose();
+    super.dispose();
+  }
+
+  void _videoListener() {
+    if (_videoPlayerController == null) return;
+    final isPlaying = _videoPlayerController!.value.isPlaying;
+    if (isPlaying != _isPlaying) {
+      setState(() {
+        _isPlaying = isPlaying;
+      });
+    }
+  }
+
+  Future<void> _initPlayer({bool autoPlay = false}) async {
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      final isLocal = widget.videoUrl.startsWith('/') ||
+          widget.videoUrl.startsWith('file://') ||
+          widget.videoUrl.contains('/data/') ||
+          widget.videoUrl.contains('/storage/');
+
+      if (isLocal) {
+        final cleanPath = widget.videoUrl.replaceFirst(RegExp(r'^file://'), '');
+        _videoPlayerController = VideoPlayerController.file(File(cleanPath));
+      } else {
+        _videoPlayerController = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
+      }
+
+      await _videoPlayerController!.initialize();
+      _videoPlayerController!.addListener(_videoListener);
+
+      _chewieController = ChewieController(
+        videoPlayerController: _videoPlayerController!,
+        aspectRatio: _videoPlayerController!.value.aspectRatio,
+        autoPlay: autoPlay,
+        looping: false,
+        allowFullScreen: true,
+        materialProgressColors: ChewieProgressColors(
+          playedColor: AppTheme.accent,
+          handleColor: AppTheme.accent,
+          backgroundColor: AppTheme.surfaceElevated,
+          bufferedColor: AppTheme.primary.withValues(alpha: 0.3),
+        ),
+      );
+
+      if (mounted) {
+        setState(() {
+          _isInit = true;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _error = 'Video yüklenemedi: $e';
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isInit && _chewieController != null && _videoPlayerController != null) {
+      return AspectRatio(
+        aspectRatio: _videoPlayerController!.value.aspectRatio,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Chewie(controller: _chewieController!),
+              if (!_isPlaying)
+                GestureDetector(
+                  onTap: () {
+                    _chewieController!.play();
+                  },
+                  child: Container(
+                    color: Colors.black38, // Ön izleme hafif karartma
+                    child: Center(
+                      child: Container(
+                        width: 56,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          color: AppTheme.accent.withValues(alpha: 0.95),
+                          shape: BoxShape.circle,
+                          boxShadow: AppTheme.glowAccent,
+                        ),
+                        child: const Icon(
+                          Icons.play_arrow_rounded,
+                          size: 38,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      height: 180,
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceLight,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Center(
+        child: _isLoading
+            ? const CircularProgressIndicator(color: AppTheme.accent)
+            : _error != null
+                ? Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.error_outline, color: AppTheme.error, size: 24),
+                        const SizedBox(height: 6),
+                        Text(
+                          _error!,
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.inter(color: AppTheme.error, fontSize: 12),
+                        ),
+                        TextButton(
+                          onPressed: () => _initPlayer(autoPlay: false),
+                          child: const Text('Tekrar Dene', style: TextStyle(color: AppTheme.accent)),
+                        ),
+                      ],
+                    ),
+                  )
+                : Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.play_circle_fill, size: 48, color: AppTheme.accent),
+                        onPressed: () => _initPlayer(autoPlay: true),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Videoyu Oynat',
+                        style: GoogleFonts.inter(color: AppTheme.textSecondary, fontSize: 13, fontWeight: FontWeight.w500),
+                      ),
+                    ],
+                  ),
+      ),
+    );
+  }
+}
