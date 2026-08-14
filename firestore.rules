@@ -55,9 +55,11 @@ service cloud.firestore {
     // USERS KOLEKSİYONU
     // ═══════════════════════════════════════
     match /users/{userId} {
-      // Herkes kendi profilini okuyabilir
-      // Admin ve Moderatör tüm profilleri okuyabilir
-      allow read: if isOwner(userId) || isAdminOrModerator() || isDirector() || isEmployer();
+      // Tek belge okuma: kendi profili veya yetkili roller
+      allow get: if isOwner(userId) || isAdminOrModerator() || isDirector() || isEmployer() || isActor();
+
+      // Koleksiyon sorgusu (Oyuncu Havuzu vb.): yetkili roller + oyuncular
+      allow list: if isAdminOrModerator() || isDirector() || isEmployer() || isActor();
 
       // Sadece kayıt sırasında oluşturulabilir (kendi uid'si ile)
       allow create: if isOwner(userId);
