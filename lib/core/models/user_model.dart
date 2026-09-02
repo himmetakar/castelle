@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:castelle/core/constants/user_roles.dart';
 
 /// Castelle - User Model
@@ -16,6 +17,13 @@ class UserModel {
   final Map<String, dynamic>? metadata;
   final String? recoveryEmail; // ikincil kurtarma e-postası
   final Map<String, dynamic>? moderatorPermissions; // moderatör yetkileri
+  final DateTime? birthDate; // Doğum tarihi
+  final int? age; // Yaş
+  final bool isUnder18; // 18 yaş altı mı?
+  final bool isGuardianApproved; // Veli / Yasal temsilci onayladı mı?
+  final String guardianApprovalStatus; // 'pending', 'approved', 'rejected'
+  final bool hasAcceptedTerms; // Sözleşmeler ve KVKK onaylandı mı?
+  final DateTime? acceptedTermsAt; // Onaylanma tarihi
 
   const UserModel({
     required this.uid,
@@ -30,10 +38,31 @@ class UserModel {
     this.metadata,
     this.recoveryEmail,
     this.moderatorPermissions,
+    this.birthDate,
+    this.age,
+    this.isUnder18 = false,
+    this.isGuardianApproved = false,
+    this.guardianApprovalStatus = 'pending',
+    this.hasAcceptedTerms = false,
+    this.acceptedTermsAt,
   });
 
   /// Firestore'dan UserModel oluştur
   factory UserModel.fromMap(Map<String, dynamic> map, String uid) {
+    DateTime? parseDate(dynamic val) {
+      if (val == null) return null;
+      if (val is Timestamp) return val.toDate();
+      if (val is int) return DateTime.fromMillisecondsSinceEpoch(val);
+      if (val is String) return DateTime.tryParse(val);
+      return null;
+    }
+
+    final parsedAge = map['age'] is int
+        ? map['age'] as int
+        : (map['age'] != null ? int.tryParse(map['age'].toString()) : null);
+
+    final under18Flag = map['isUnder18'] ?? (parsedAge != null && parsedAge < 18);
+
     return UserModel(
       uid: uid,
       email: map['email'] ?? '',
@@ -41,20 +70,21 @@ class UserModel {
       phone: map['phone'] ?? '',
       role: UserRole.fromString(map['role'] ?? 'actor'),
       profilePhotoUrl: map['profilePhotoUrl'],
-      createdAt: map['createdAt'] != null
-          ? DateTime.fromMillisecondsSinceEpoch(
-              map['createdAt'].millisecondsSinceEpoch)
-          : DateTime.now(),
-      updatedAt: map['updatedAt'] != null
-          ? DateTime.fromMillisecondsSinceEpoch(
-              map['updatedAt'].millisecondsSinceEpoch)
-          : DateTime.now(),
+      createdAt: parseDate(map['createdAt']) ?? DateTime.now(),
+      updatedAt: parseDate(map['updatedAt']) ?? DateTime.now(),
       isActive: map['isActive'] ?? true,
       metadata: map['metadata'],
       recoveryEmail: map['recoveryEmail'],
       moderatorPermissions: map['moderatorPermissions'] is Map
           ? Map<String, dynamic>.from(map['moderatorPermissions'])
           : null,
+      birthDate: parseDate(map['birthDate']),
+      age: parsedAge,
+      isUnder18: under18Flag,
+      isGuardianApproved: map['isGuardianApproved'] ?? false,
+      guardianApprovalStatus: map['guardianApprovalStatus'] ?? (under18Flag ? 'pending' : 'approved'),
+      hasAcceptedTerms: map['hasAcceptedTerms'] ?? false,
+      acceptedTermsAt: parseDate(map['acceptedTermsAt']),
     );
   }
 
@@ -72,6 +102,13 @@ class UserModel {
       'metadata': metadata,
       'recoveryEmail': recoveryEmail,
       'moderatorPermissions': moderatorPermissions,
+      'birthDate': birthDate?.toIso8601String(),
+      'age': age,
+      'isUnder18': isUnder18,
+      'isGuardianApproved': isGuardianApproved,
+      'guardianApprovalStatus': guardianApprovalStatus,
+      'hasAcceptedTerms': hasAcceptedTerms,
+      'acceptedTermsAt': acceptedTermsAt?.toIso8601String(),
     };
   }
 
@@ -86,6 +123,13 @@ class UserModel {
     Map<String, dynamic>? metadata,
     String? recoveryEmail,
     Map<String, dynamic>? moderatorPermissions,
+    DateTime? birthDate,
+    int? age,
+    bool? isUnder18,
+    bool? isGuardianApproved,
+    String? guardianApprovalStatus,
+    bool? hasAcceptedTerms,
+    DateTime? acceptedTermsAt,
   }) {
     return UserModel(
       uid: uid,
@@ -100,6 +144,13 @@ class UserModel {
       metadata: metadata ?? this.metadata,
       recoveryEmail: recoveryEmail ?? this.recoveryEmail,
       moderatorPermissions: moderatorPermissions ?? this.moderatorPermissions,
+      birthDate: birthDate ?? this.birthDate,
+      age: age ?? this.age,
+      isUnder18: isUnder18 ?? this.isUnder18,
+      isGuardianApproved: isGuardianApproved ?? this.isGuardianApproved,
+      guardianApprovalStatus: guardianApprovalStatus ?? this.guardianApprovalStatus,
+      hasAcceptedTerms: hasAcceptedTerms ?? this.hasAcceptedTerms,
+      acceptedTermsAt: acceptedTermsAt ?? this.acceptedTermsAt,
     );
   }
 

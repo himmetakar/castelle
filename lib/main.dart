@@ -14,6 +14,7 @@ import 'package:castelle/features/employer/providers/project_provider.dart';
 import 'package:castelle/core/providers/notification_provider.dart';
 import 'package:castelle/features/actor/providers/audition_provider.dart';
 import 'package:castelle/core/services/audition_cleanup_service.dart';
+import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
 import 'firebase_options.dart';
 
 /// Castelle - Premium Casting Agency SaaS Platform
@@ -21,6 +22,7 @@ import 'firebase_options.dart';
 
 /// Eski mock oyuncu belgelerini Firestore'dan temizle (tek seferlik)
 Future<void> _cleanupMockData() async {
+  if (FirebaseAuth.instance.currentUser == null) return;
   final firestore = FirebaseFirestore.instance;
   const mockIds = ['mock_actor_1', 'mock_actor_2', 'mock_actor_3',
                    'mock_actor_4', 'mock_actor_5', 'mock_actor_6',
@@ -33,9 +35,7 @@ Future<void> _cleanupMockData() async {
         await doc.delete();
         debugPrint('🗑️ [Cleanup] Mock silindi: $id');
       }
-    } catch (e) {
-      debugPrint('⚠️ [Cleanup] $id silinemedi: $e');
-    }
+    } catch (_) {}
   }
 }
 
@@ -64,15 +64,11 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  // Eski mock verileri temizle (arka planda)
-  _cleanupMockData().catchError(
-    (e) => debugPrint('⚠️ Mock cleanup hatası: $e'),
-  );
-
-  // Çekim tarihi geçmiş audition videoları temizle (arka planda)
-  AuditionCleanupService.runCleanup().catchError(
-    (e) => debugPrint('⚠️ Audition cleanup hatası: $e'),
-  );
+  // Sadece giriş yapmış kullanıcı varsa arka plan temizleme işlemlerini çalıştır
+  if (FirebaseAuth.instance.currentUser != null) {
+    _cleanupMockData().catchError((_) {});
+    AuditionCleanupService.runCleanup().catchError((_) {});
+  }
 
   runApp(const CastelleApp());
 }

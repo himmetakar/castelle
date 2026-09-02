@@ -393,11 +393,15 @@ class AuditionService {
     try {
       final audition = await getAudition(auditionId);
       if (audition != null) {
+        final pTitle = audition.projectTitle.toUpperCase().startsWith('OPSİYON')
+            ? audition.projectTitle.toUpperCase()
+            : 'OPSİYON ${audition.projectTitle.toUpperCase()}';
+
         final notif = NotificationModel(
           id: 'aud_opt_${DateTime.now().millisecondsSinceEpoch}',
           recipientId: audition.actorId,
-          title: 'Opsiyon Talebi 🎭',
-          body: '"${audition.projectTitle}" projesi için size bir opsiyon talebi gönderildi. Lütfen detayları yanıtlayın.',
+          title: pTitle,
+          body: '${audition.projectTitle} reklam projesi için size bir opsiyon gönderildi. Detayları inceleyip cevap verebilirsiniz.',
           type: NotificationType.auditionResult,
           isRead: false,
           senderId: reviewerId,

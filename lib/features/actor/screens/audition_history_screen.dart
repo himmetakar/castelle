@@ -362,11 +362,16 @@ class _AuditionHistoryScreenState extends State<AuditionHistoryScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      audition.projectTitle,
+                      audition.status == AuditionStatus.options || audition.projectTitle.toUpperCase().startsWith('OPSİYON')
+                          ? (audition.projectTitle.toUpperCase().startsWith('OPSİYON')
+                              ? audition.projectTitle.toUpperCase()
+                              : 'OPSİYON ${audition.projectTitle.toUpperCase()}')
+                          : audition.projectTitle,
                       style: GoogleFonts.outfit(
                         fontSize: 15,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.bold,
                         color: AppTheme.textPrimary,
+                        letterSpacing: 0.3,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -417,7 +422,7 @@ class _AuditionHistoryScreenState extends State<AuditionHistoryScreen>
                   ],
                 ),
               ),
-              _buildStatusChip(audition.status),
+              _buildStatusChip(audition),
             ],
           ),
 
@@ -903,8 +908,26 @@ class _AuditionHistoryScreenState extends State<AuditionHistoryScreen>
     }
   }
 
-  Widget _buildStatusChip(AuditionStatus status) {
-    final color = _statusColor(status);
+  Widget _buildStatusChip(AuditionModel audition) {
+    String label = audition.status.displayName;
+    Color color = _statusColor(audition.status);
+
+    if (audition.status == AuditionStatus.options) {
+      if (audition.optionAvailable == null) {
+        label = '🟡 Cevap Bekleniyor';
+        color = AppTheme.warning;
+      } else if (audition.optionAvailable == true) {
+        label = '🟢 Opsiyonda';
+        color = AppTheme.success;
+      } else {
+        label = '🔴 Müsait Değil';
+        color = AppTheme.error;
+      }
+    } else if (audition.status == AuditionStatus.approved) {
+      label = '🔵 Kesinleşti';
+      color = Colors.blue;
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
@@ -913,7 +936,7 @@ class _AuditionHistoryScreenState extends State<AuditionHistoryScreen>
         border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Text(
-        status.displayName,
+        label,
         style: GoogleFonts.inter(
           fontSize: 11,
           fontWeight: FontWeight.w600,
@@ -1142,11 +1165,14 @@ class _OptionResponseDialogState extends State<OptionResponseDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Opsiyon Talebini Yanıtla',
+              widget.audition.projectTitle.toUpperCase().startsWith('OPSİYON')
+                  ? widget.audition.projectTitle.toUpperCase()
+                  : 'OPSİYON ${widget.audition.projectTitle.toUpperCase()}',
               style: GoogleFonts.outfit(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
                 color: AppTheme.textPrimary,
+                letterSpacing: 0.5,
               ),
             ),
             const SizedBox(height: 4),

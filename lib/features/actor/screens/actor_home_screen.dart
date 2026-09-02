@@ -178,7 +178,7 @@ class _ActorHomeScreenState extends State<ActorHomeScreen> {
       );
     }
 
-    final isApproved = profile.approvalStatus != 'rejected';
+    final isApproved = profile.approvalStatus == 'approved';
 
     final tabs = [
       const AppShellTab(
@@ -683,7 +683,7 @@ class _ActorDashboardState extends State<_ActorDashboard> {
     final profileProvider = context.watch<ActorProfileProvider>();
     final profile = profileProvider.profile;
     final completion = profileProvider.completionPercentage;
-    final isApproved = profile?.approvalStatus != 'rejected';
+    final isApproved = profile?.approvalStatus == 'approved';
 
     final auditionProvider = context.watch<AuditionProvider>();
     final auditions = auditionProvider.auditions;
@@ -750,9 +750,122 @@ class _ActorDashboardState extends State<_ActorDashboard> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Yönetici onayı bekleyen üyeler için uyarı kartı
+                      if (!isApproved) ...[
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                AppTheme.warning.withValues(alpha: 0.15),
+                                AppTheme.warning.withValues(alpha: 0.05),
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                            border: Border.all(
+                              color: AppTheme.warning.withValues(alpha: 0.35),
+                              width: 1,
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    width: 44,
+                                    height: 44,
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.warning.withValues(alpha: 0.2),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: const Icon(
+                                      Icons.hourglass_top_rounded,
+                                      color: AppTheme.warning,
+                                      size: 24,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 14),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          profile?.approvalStatus == 'pending'
+                                              ? 'Profiliniz Yönetici Onayı Bekliyor ⏳'
+                                              : 'Profilinizi Tamamlayın ✨',
+                                          style: GoogleFonts.outfit(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                            color: AppTheme.textPrimary,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          profile?.approvalStatus == 'pending'
+                                              ? 'Yöneticilerimiz profil bilgilerinizi inceledikten sonra üyeliğinizi onaylayacaktır. Bu süreçte profilinizi güncelleyebilirsiniz.'
+                                              : 'Profilinizi tamamlayarak admin onayına sunun ve oyuncularımız arasına katılın.',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 12.5,
+                                            color: AppTheme.textSecondary,
+                                            height: 1.4,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  onPressed: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => const ActorProfileEditScreen(),
+                                      ),
+                                    );
+                                  },
+                                  icon: Icon(
+                                    profile?.approvalStatus == 'pending'
+                                        ? Icons.edit_outlined
+                                        : Icons.rocket_launch_outlined,
+                                    size: 18,
+                                  ),
+                                  label: Text(
+                                    profile?.approvalStatus == 'pending'
+                                        ? 'Profilimi Düzenle'
+                                        : 'Profilimi Tamamla & Onaya Sun 🚀',
+                                    style: GoogleFonts.outfit(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: profile?.approvalStatus == 'pending'
+                                        ? AppTheme.warning
+                                        : AppTheme.accent,
+                                    foregroundColor: profile?.approvalStatus == 'pending'
+                                        ? Colors.black87
+                                        : Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                                    ),
+                                    elevation: 0,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ).animate().fadeIn().slideY(begin: 0.1),
+                        const SizedBox(height: 20),
+                      ],
+
                       // Profil tamamlama kartı
                       if (_showProfileCard) ...[
-
                         Stack(
                           children: [
                             GestureDetector(

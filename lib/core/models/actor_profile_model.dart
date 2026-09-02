@@ -139,6 +139,21 @@ class ActorProfileModel {
   final String approvalStatus; // 'pending', 'approved', 'rejected'
   final String? adminNote;     // Admin'in düzenleyici mesajı
 
+  // Yeni Detaylı Profil Alanları
+  final String? bodyMeasurements; // Beden Ölçüleri (Örn: 90-60-90 / M)
+  final String? shoeSize; // Ayakkabı Numarası (Örn: 42)
+  final List<String> actingEducation; // Oyunculuk Eğitimi
+  final List<String> theaterExperience; // Tiyatro Deneyimi
+  final List<String> seriesExperience; // Dizi Deneyimi
+  final List<String> movieExperience; // Film Deneyimi
+  final List<String> commercialExperience; // Reklam Deneyimi
+  final Map<String, String> languageLevels; // Yabancı Diller & Seviyeleri (Örn: {'İngilizce': 'İleri (C1)'})
+  final List<String> accents; // Aksanlar (Örn: Ege, Karadeniz, İngiliz)
+  final List<String> drivingLicense; // Ehliyet (Örn: B Sınıfı, A2)
+  final String? cvPdfUrl; // PDF CV Dosya Linki
+  final String? cvText; // Yazılı CV / Özgeçmiş
+  final List<Map<String, dynamic>> projectVideos; // Geçmiş Proje Videoları
+
   const ActorProfileModel({
     required this.uid,
     required this.fullName,
@@ -179,8 +194,21 @@ class ActorProfileModel {
     this.lockedSections = const {},
     this.isHidden = false,
     this.acceptedNdas = const [],
-    this.approvalStatus = 'approved', // Eski kayıtlar varsayılan olarak approved
+    this.approvalStatus = 'pending', // Yeni/Varsayılan kayıtlar onay bekler
     this.adminNote,
+    this.bodyMeasurements,
+    this.shoeSize,
+    this.actingEducation = const [],
+    this.theaterExperience = const [],
+    this.seriesExperience = const [],
+    this.movieExperience = const [],
+    this.commercialExperience = const [],
+    this.languageLevels = const {},
+    this.accents = const [],
+    this.drivingLicense = const [],
+    this.cvPdfUrl,
+    this.cvText,
+    this.projectVideos = const [],
   });
 
   /// Firestore'dan oluştur
@@ -235,6 +263,54 @@ class ActorProfileModel {
             .toList() ??
         [];
 
+    final actingEducation = (map['actingEducation'] as List<dynamic>?)
+            ?.map((e) => e.toString())
+            .toList() ??
+        [];
+
+    final theaterExperience = (map['theaterExperience'] as List<dynamic>?)
+            ?.map((e) => e.toString())
+            .toList() ??
+        [];
+
+    final seriesExperience = (map['seriesExperience'] as List<dynamic>?)
+            ?.map((e) => e.toString())
+            .toList() ??
+        [];
+
+    final movieExperience = (map['movieExperience'] as List<dynamic>?)
+            ?.map((e) => e.toString())
+            .toList() ??
+        [];
+
+    final commercialExperience = (map['commercialExperience'] as List<dynamic>?)
+            ?.map((e) => e.toString())
+            .toList() ??
+        [];
+
+    final accents = (map['accents'] as List<dynamic>?)
+            ?.map((e) => e.toString())
+            .toList() ??
+        [];
+
+    final drivingLicense = (map['drivingLicense'] as List<dynamic>?)
+            ?.map((e) => e.toString())
+            .toList() ??
+        [];
+
+    final languageLevels = <String, String>{};
+    if (map['languageLevels'] != null) {
+      final raw = map['languageLevels'] as Map<String, dynamic>;
+      for (final entry in raw.entries) {
+        languageLevels[entry.key] = entry.value.toString();
+      }
+    }
+
+    final projectVideos = (map['projectVideos'] as List<dynamic>?)
+            ?.map((e) => Map<String, dynamic>.from(e as Map))
+            .toList() ??
+        [];
+
     return ActorProfileModel(
       uid: uid,
       fullName: map['fullName'] ?? '',
@@ -281,8 +357,21 @@ class ActorProfileModel {
       lockedSections: lockedSections,
       isHidden: map['isHidden'] ?? false,
       acceptedNdas: acceptedNdas,
-      approvalStatus: map['approvalStatus'] as String? ?? 'approved',
+      approvalStatus: map['approvalStatus'] as String? ?? 'pending',
       adminNote: map['adminNote'] as String?,
+      bodyMeasurements: map['bodyMeasurements'],
+      shoeSize: map['shoeSize'],
+      actingEducation: actingEducation,
+      theaterExperience: theaterExperience,
+      seriesExperience: seriesExperience,
+      movieExperience: movieExperience,
+      commercialExperience: commercialExperience,
+      languageLevels: languageLevels,
+      accents: accents,
+      drivingLicense: drivingLicense,
+      cvPdfUrl: map['cvPdfUrl'],
+      cvText: map['cvText'],
+      projectVideos: projectVideos,
     );
   }
 
@@ -331,6 +420,19 @@ class ActorProfileModel {
       'acceptedNdas': acceptedNdas,
       'approvalStatus': approvalStatus,
       'adminNote': adminNote,
+      'bodyMeasurements': bodyMeasurements,
+      'shoeSize': shoeSize,
+      'actingEducation': actingEducation,
+      'theaterExperience': theaterExperience,
+      'seriesExperience': seriesExperience,
+      'movieExperience': movieExperience,
+      'commercialExperience': commercialExperience,
+      'languageLevels': languageLevels,
+      'accents': accents,
+      'drivingLicense': drivingLicense,
+      'cvPdfUrl': cvPdfUrl,
+      'cvText': cvText,
+      'projectVideos': projectVideos,
     };
   }
 
@@ -400,6 +502,19 @@ class ActorProfileModel {
     List<String>? acceptedNdas,
     String? approvalStatus,
     String? adminNote,
+    String? bodyMeasurements,
+    String? shoeSize,
+    List<String>? actingEducation,
+    List<String>? theaterExperience,
+    List<String>? seriesExperience,
+    List<String>? movieExperience,
+    List<String>? commercialExperience,
+    Map<String, String>? languageLevels,
+    List<String>? accents,
+    List<String>? drivingLicense,
+    String? cvPdfUrl,
+    String? cvText,
+    List<Map<String, dynamic>>? projectVideos,
   }) {
     return ActorProfileModel(
       uid: uid,
@@ -443,6 +558,19 @@ class ActorProfileModel {
       acceptedNdas: acceptedNdas ?? this.acceptedNdas,
       approvalStatus: approvalStatus ?? this.approvalStatus,
       adminNote: adminNote ?? this.adminNote,
+      bodyMeasurements: bodyMeasurements ?? this.bodyMeasurements,
+      shoeSize: shoeSize ?? this.shoeSize,
+      actingEducation: actingEducation ?? this.actingEducation,
+      theaterExperience: theaterExperience ?? this.theaterExperience,
+      seriesExperience: seriesExperience ?? this.seriesExperience,
+      movieExperience: movieExperience ?? this.movieExperience,
+      commercialExperience: commercialExperience ?? this.commercialExperience,
+      languageLevels: languageLevels ?? this.languageLevels,
+      accents: accents ?? this.accents,
+      drivingLicense: drivingLicense ?? this.drivingLicense,
+      cvPdfUrl: cvPdfUrl ?? this.cvPdfUrl,
+      cvText: cvText ?? this.cvText,
+      projectVideos: projectVideos ?? this.projectVideos,
     );
   }
 }

@@ -15,6 +15,10 @@ class AuthService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn();
 
+  AuthService() {
+    _auth.setLanguageCode('tr');
+  }
+
   // Current Firebase User
   User? get currentUser => _auth.currentUser;
 
@@ -28,6 +32,10 @@ class AuthService {
     required String fullName,
     required String phone,
     required String role,
+    DateTime? birthDate,
+    int? age,
+    bool isUnder18 = false,
+    bool hasAcceptedTerms = true,
   }) async {
     try {
       final UserCredential credential =
@@ -41,6 +49,9 @@ class AuthService {
 
       await user.updateDisplayName(fullName);
 
+      final calculatedAge = age ?? (birthDate != null ? (DateTime.now().year - birthDate.year) : null);
+      final under18 = isUnder18 || (calculatedAge != null && calculatedAge < 18);
+
       final userModel = UserModel(
         uid: user.uid,
         email: email.trim(),
@@ -49,6 +60,14 @@ class AuthService {
         role: UserRole.fromString(role),
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
+        birthDate: birthDate,
+        age: calculatedAge,
+        isUnder18: under18,
+        isGuardianApproved: !under18,
+        guardianApprovalStatus: under18 ? 'pending' : 'approved',
+        hasAcceptedTerms: hasAcceptedTerms,
+        acceptedTermsAt: DateTime.now(),
+        isActive: !under18, // 18 yaş altı kullanıcı veli onayı alınana kadar inaktif
       );
 
       await _firestore
@@ -56,17 +75,19 @@ class AuthService {
           .doc(user.uid)
           .set({
         ...userModel.toMap(),
-        'isActive': true,
-        'approvalStatus': 'approved',
-        'approvedAt': FieldValue.serverTimestamp(),
+        'isActive': !under18,
+        'isHidden': under18, // 18 yaş altı listede saklanır
+        'approvalStatus': role == UserRole.admin.value ? 'approved' : (under18 ? 'pending_guardian' : 'pending'),
+        if (role == UserRole.admin.value) 'approvedAt': FieldValue.serverTimestamp(),
       });
 
       // Admin kullanıcılarına yeni üye bildirimi gönder
       try {
         final roleLabel = UserRole.fromString(role).displayName;
+        final extraTag = under18 ? ' (18 Yaş Altı - Veli Onayı Bekliyor)' : '';
         await NotificationService().sendBulkNotification(
           title: 'Yeni Üye Kaydı 👤',
-          body: '${fullName.trim()} ($roleLabel) platforma yeni kayıt oldu.',
+          body: '${fullName.trim()} ($roleLabel)$extraTag platforma yeni kayıt oldu.',
           type: NotificationType.systemMessage,
           target: NotificationTarget.admins,
         );
@@ -74,6 +95,43 @@ class AuthService {
 
       return userModel;
     } on FirebaseAuthException catch (e) {
+      throw _handleAuthError(e);
+    }
+  }
+
+  /// Yasal Sözleşmeler ve KVKK Onayını Güncelle
+  Future<void> acceptLegalConsent(
+    String uid, {
+    DateTime? birthDate,
+    int? age,
+    bool? isUnder18,
+  }) async {
+    final calculatedAge = age ?? (birthDate != null ? (DateTime.now().year - birthDate.year) : null);
+    final under18 = (isUnder18 == true) || (calculatedAge != null && calculatedAge < 18);
+
+    final updateData = <String, dynamic>{
+      'hasAcceptedTerms': true,
+      'acceptedTermsAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+
+    if (birthDate != null) updateData['birthDate'] = birthDate.toIso8601String();
+    if (calculatedAge != null) updateData['age'] = calculatedAge;
+    if (isUnder18 != null || calculatedAge != null) {
+      updateData['isUnder18'] = under18;
+      if (under18) {
+        updateData['isActive'] = false;
+        updateData['isHidden'] = true;
+        updateData['isGuardianApproved'] = false;
+        updateData['guardianApprovalStatus'] = 'pending';
+      }
+    }
+
+    await _firestore
+        .collection(AppConstants.usersCollection)
+        .doc(uid)
+        .set(updateData, SetOptions(merge: true));
+  }
       throw _handleAuthError(e);
     }
   }
@@ -165,12 +223,21 @@ class AuthService {
   /// Google ile Giriş/Kayıt
   Future<UserModel> signInWithGoogle() async {
     try {
-      // Her defasında hangi Google hesabı ile giriş yapılacağını sorması için önbellekteki oturumu sıfırla
+      // 1. Önce eski Firebase Auth oturumunu temizle
       try {
-        await _googleSignIn.signOut();
+        await _auth.signOut();
       } catch (_) {}
 
-      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      // 2. Google oturumunu sıfırla
+      final GoogleSignIn googleSignIn = GoogleSignIn();
+      try {
+        await googleSignIn.signOut();
+      } catch (_) {}
+      try {
+        await googleSignIn.disconnect();
+      } catch (_) {}
+
+      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
       if (googleUser == null) {
         throw Exception('Google giriş işlemi iptal edildi.');
       }
@@ -194,10 +261,15 @@ class AuthService {
           .doc(user.uid)
           .get();
 
-      if (doc.exists) {
+      final hasActiveApprovedProfile = doc.exists &&
+          doc.data() != null &&
+          doc.data()!['isActive'] == true &&
+          doc.data()!['approvalStatus'] == 'approved';
+
+      if (hasActiveApprovedProfile) {
         return UserModel.fromMap(doc.data()!, user.uid);
       } else {
-        // Firestore dokümanı yoksa varsayılan olarak 'actor' (oyuncu) rolüyle oluştur
+        // Doküman yoksa veya hesabı silinmişse yeni 'pending' (onay bekleyen) kullanıcı oluştur
         final userModel = UserModel(
           uid: user.uid,
           email: user.email ?? '',
@@ -214,8 +286,7 @@ class AuthService {
             .set({
           ...userModel.toMap(),
           'isActive': true,
-          'approvalStatus': 'approved',
-          'approvedAt': FieldValue.serverTimestamp(),
+          'approvalStatus': 'pending',
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
@@ -264,30 +335,33 @@ class AuthService {
 
   /// Çıkış yap
   Future<void> signOut() async {
+    try {
+      await _googleSignIn.signOut();
+    } catch (_) {}
+    try {
+      await _googleSignIn.disconnect();
+    } catch (_) {}
     await _auth.signOut();
   }
 
   /// Şifre sıfırlama
   Future<void> resetPassword(String emailOrRecoveryEmail) async {
-    final input = emailOrRecoveryEmail.trim().toLowerCase();
-    
-    // Firestore'da recoveryEmail alanını sorgula
-    final queryByRecovery = await _firestore
-        .collection(AppConstants.usersCollection)
-        .where('recoveryEmail', isEqualTo: input)
-        .limit(1)
-        .get();
-
-    String targetEmail = input;
-    if (queryByRecovery.docs.isNotEmpty) {
-      final userDoc = queryByRecovery.docs.first.data();
-      final primaryEmail = userDoc['email'];
-      if (primaryEmail != null && primaryEmail.toString().isNotEmpty) {
-        targetEmail = primaryEmail.toString();
+    try {
+      final input = emailOrRecoveryEmail.trim().toLowerCase();
+      
+      // 1. Demo e-posta adresi mi kontrol et (@example.com veya @castelle.com)
+      if (input.endsWith('@castelle.com') || input.endsWith('@example.com')) {
+        throw Exception('Demo hesaplara (@castelle.com / @example.com) gerçek e-posta gönderilemez. Lütfen gerçek bir e-posta adresi kullanın veya ana ekrandaki demo giriş butonlarını deneyin.');
       }
+
+      // 2. Doğrudan Firebase Auth üzerinden şifre sıfırlama e-postası gönder
+      // Unauthenticated (giriş yapmamış) kullanıcıların Firestore 'users' koleksiyonunu okuma yetkisi güvenlik kuralları gereği yoktur.
+      await _auth.sendPasswordResetEmail(email: input);
+    } on FirebaseAuthException catch (e) {
+      throw _handleAuthError(e);
+    } catch (e) {
+      throw Exception(e.toString().replaceAll("Exception: ", ""));
     }
-    
-    await _auth.sendPasswordResetEmail(email: targetEmail);
   }
 
   /// FCM Token güncelle
@@ -301,33 +375,48 @@ class AuthService {
     });
   }
 
-  /// Firebase Auth Hata İşleme (Türkçe)
-  Exception _handleAuthError(FirebaseAuthException e) {
-    if (e.message != null && e.message!.contains('CONFIGURATION_NOT_FOUND')) {
-      return Exception('Firebase Console\'da E-posta/Şifre giriş yöntemi etkinleştirilmemiş. Lütfen Firebase Console -> Authentication -> Sign-in method altından E-posta/Şifre seçeneğini etkinleştirin.');
+  /// Firebase Auth & Firestore Hata İşleme (Türkçe)
+  Exception _handleAuthError(dynamic e) {
+    if (e is FirebaseException) {
+      if (e.code == 'permission-denied') {
+        return Exception('Erişim engellendi: Bu işlemi gerçekleştirmek için yetkiniz bulunmuyor.');
+      }
     }
-    switch (e.code) {
-      case 'configuration-not-found':
+    if (e is FirebaseAuthException) {
+      if (e.message != null && e.message!.contains('CONFIGURATION_NOT_FOUND')) {
         return Exception('Firebase Console\'da E-posta/Şifre giriş yöntemi etkinleştirilmemiş. Lütfen Firebase Console -> Authentication -> Sign-in method altından E-posta/Şifre seçeneğini etkinleştirin.');
-      case 'email-already-in-use':
-        return Exception('Bu e-posta adresi zaten kullanımda.');
-      case 'invalid-email':
-        return Exception('Geçersiz e-posta adresi.');
-      case 'weak-password':
-        return Exception('Şifre çok zayıf. En az 6 karakter kullanın.');
-      case 'user-not-found':
-        return Exception('Bu e-posta ile kayıtlı kullanıcı bulunamadı.');
-      case 'wrong-password':
-        return Exception('Yanlış şifre.');
-      case 'user-disabled':
-        return Exception('Bu hesap devre dışı bırakılmış.');
-      case 'too-many-requests':
-        return Exception('Çok fazla deneme yaptınız. Lütfen bekleyin.');
-      case 'network-request-failed':
-        return Exception('İnternet bağlantınızı kontrol edin.');
-      default:
-        return Exception('Bir hata oluştu: ${e.message}');
+      }
+      switch (e.code) {
+        case 'configuration-not-found':
+          return Exception('Firebase Console\'da E-posta/Şifre giriş yöntemi etkinleştirilmemiş. Lütfen Firebase Console -> Authentication -> Sign-in method altından E-posta/Şifre seçeneğini etkinleştirin.');
+        case 'email-already-in-use':
+          return Exception('Bu e-posta adresi zaten kullanımda.');
+        case 'invalid-email':
+        case 'auth/invalid-email':
+          return Exception('Geçersiz bir e-posta adresi girdiniz.');
+        case 'missing-email':
+        case 'auth/missing-email':
+          return Exception('Lütfen bir e-posta adresi girin.');
+        case 'weak-password':
+          return Exception('Şifre çok zayıf. En az 6 karakter kullanın.');
+        case 'user-not-found':
+        case 'auth/user-not-found':
+          return Exception('Bu e-posta adresi ile kayıtlı kullanıcı bulunamadı.');
+        case 'wrong-password':
+          return Exception('Yanlış şifre.');
+        case 'user-disabled':
+          return Exception('Bu hesap devre dışı bırakılmış.');
+        case 'too-many-requests':
+          return Exception('Çok fazla deneme yaptınız. Lütfen bir süre bekleyin.');
+        case 'network-request-failed':
+          return Exception('İnternet bağlantınızı kontrol edin.');
+        case 'channel-error':
+          return Exception('Lütfen e-posta adresinizi girdiğinizden emin olun.');
+        default:
+          return Exception('Bir hata oluştu: ${e.message ?? e.code}');
+      }
     }
+    return Exception('Bir hata oluştu: ${e.toString().replaceAll("Exception: ", "")}');
   }
 
   /// Demo oyuncu profilini Firestore'a seed'le

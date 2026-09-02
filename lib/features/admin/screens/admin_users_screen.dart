@@ -7,7 +7,10 @@ import 'package:castelle/core/theme/app_theme.dart';
 import 'package:castelle/core/constants/app_constants.dart';
 import 'package:castelle/core/constants/user_roles.dart';
 import 'package:castelle/core/models/user_model.dart';
+import 'package:castelle/core/models/actor_profile_model.dart';
 import 'package:castelle/core/providers/auth_provider.dart';
+import 'package:castelle/features/admin/screens/actor_filter_screen.dart';
+import 'package:castelle/features/admin/screens/actor_detail_screen.dart';
 
 /// Admin Kullanıcı Yönetim Ekranı
 /// Tüm kullanıcıları listeler, rol ataması ve aktif/pasif yönetimi yapar
@@ -76,6 +79,33 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
       ),
       body: Column(
         children: [
+          // Gelişmiş Oyuncu Filtreleme Butonu
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: SizedBox(
+              width: double.infinity,
+              height: 42,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const ActorFilterScreen()),
+                  );
+                },
+                icon: const Icon(Icons.tune, size: 18),
+                label: Text(
+                  'Gelişmiş Oyuncu Filtreleme 🔍',
+                  style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 13.5),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.accent,
+                  foregroundColor: AppTheme.textOnAccent,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radiusSm)),
+                ),
+              ),
+            ),
+          ),
+
           // Arama çubuğu
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
@@ -84,7 +114,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
               onChanged: (val) => setState(() => _searchQuery = val),
               style: const TextStyle(color: AppTheme.textPrimary),
               decoration: InputDecoration(
-                hintText: 'İsim veya e-posta ara...',
+                hintText: 'İsim, e-posta veya telefon ara...',
                 prefixIcon: const Icon(Icons.search, size: 20),
                 suffixIcon: _searchQuery.isNotEmpty
                     ? IconButton(
@@ -472,6 +502,62 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
             const Divider(color: AppTheme.border),
             const SizedBox(height: 8),
 
+            // Oyuncu Yönetim Aksiyonları
+            if (user.role == UserRole.actor) ...[
+              // Profili İncele / CV Gör
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.person_search_outlined, color: AppTheme.accent),
+                title: Text(
+                  'Oyuncu Profilini İncele (CV Gör)',
+                  style: GoogleFonts.inter(color: AppTheme.textPrimary, fontWeight: FontWeight.w500),
+                ),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  try {
+                    final doc = await _firestore.collection('users').doc(user.uid).get();
+                    if (doc.exists && context.mounted) {
+                      final actorProfile = ActorProfileModel.fromMap(doc.data()!, doc.id);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => ActorDetailScreen(actor: actorProfile)),
+                      );
+                    }
+                  } catch (e) {
+                    debugPrint('Error loading actor profile: $e');
+                  }
+                },
+              ),
+
+              // Profil Onayla / Reddet
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.verified_user_outlined, color: AppTheme.success),
+                title: Text(
+                  'Oyuncuyu Onayla (Yayına Al)',
+                  style: GoogleFonts.inter(color: AppTheme.success, fontWeight: FontWeight.w500),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _approveActorProfile(user);
+                },
+              ),
+
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.cancel_outlined, color: AppTheme.warning),
+                title: Text(
+                  'Profil Onayını Reddet / Not Ekle',
+                  style: GoogleFonts.inter(color: AppTheme.warning, fontWeight: FontWeight.w500),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _rejectActorProfileDialog(user);
+                },
+              ),
+              const Divider(color: AppTheme.border),
+            ],
+
             // Aktif/Pasif toggle
             ListTile(
               contentPadding: EdgeInsets.zero,
@@ -479,18 +565,35 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                 user.isActive
                     ? Icons.block
                     : Icons.check_circle_outline,
-                color: user.isActive ? AppTheme.error : AppTheme.success,
+                color: user.isActive ? AppTheme.warning : AppTheme.success,
               ),
               title: Text(
-                user.isActive ? 'Hesabı Devre Dışı Bırak' : 'Hesabı Aktifleştir',
+                user.isActive ? 'Hesabı Devre Dışı Bırak (Pasife Çek)' : 'Hesabı Aktifleştir',
                 style: GoogleFonts.inter(
-                  color: user.isActive ? AppTheme.error : AppTheme.success,
+                  color: user.isActive ? AppTheme.warning : AppTheme.success,
                   fontWeight: FontWeight.w500,
                 ),
               ),
               onTap: () {
                 Navigator.pop(ctx);
                 _toggleUserActive(user);
+              },
+            ),
+
+            // Kullanıcıyı Kalıcı Sil
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.delete_forever_outlined, color: AppTheme.error),
+              title: Text(
+                'Kullanıcıyı Kalıcı Olarak Sil',
+                style: GoogleFonts.inter(
+                  color: AppTheme.error,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              onTap: () {
+                Navigator.pop(ctx);
+                _confirmDeleteUser(user);
               },
             ),
 
@@ -575,6 +678,149 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
             backgroundColor: AppTheme.error,
           ),
         );
+      }
+    }
+  }
+
+  Future<void> _approveActorProfile(UserModel user) async {
+    try {
+      await _firestore.collection(AppConstants.usersCollection).doc(user.uid).update({
+        'approvalStatus': 'approved',
+        'isActive': true,
+        'isHidden': false,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${user.fullName} oyuncu profili onaylandı ve yayına alındı ✅'),
+            backgroundColor: AppTheme.success,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Onaylama hatası: $e'), backgroundColor: AppTheme.error),
+        );
+      }
+    }
+  }
+
+  Future<void> _rejectActorProfileDialog(UserModel user) async {
+    final noteController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surfaceCard,
+        title: Text('Profil Onayını Reddet', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('${user.fullName} oyuncusunun profili reddedilecek. Oyuncuya iletilecek admin notunu yazabilirsiniz:',
+                style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textSecondary)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: noteController,
+              maxLines: 3,
+              style: const TextStyle(color: AppTheme.textPrimary),
+              decoration: const InputDecoration(
+                hintText: 'Örn: Lütfen vesikalık yerine net portfolio fotoğrafı yükleyin.',
+                labelText: 'Admin Notu (Opsiyonel)',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('İptal', style: TextStyle(color: AppTheme.textTertiary)),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              try {
+                await _firestore.collection(AppConstants.usersCollection).doc(user.uid).update({
+                  'approvalStatus': 'rejected',
+                  'adminNote': noteController.text.trim().isEmpty ? null : noteController.text.trim(),
+                  'isActive': false,
+                  'isHidden': true,
+                  'updatedAt': FieldValue.serverTimestamp(),
+                });
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('${user.fullName} profili reddedildi ❌'),
+                      backgroundColor: AppTheme.warning,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('İşlem hatası: $e'), backgroundColor: AppTheme.error),
+                  );
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error),
+            child: const Text('Reddet'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmDeleteUser(UserModel user) async {
+    final authProvider = context.read<AuthProvider>();
+    if (!authProvider.isAdmin) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Kullanıcı hesabı silme yetkisi sadece Admin role aittir.'), backgroundColor: AppTheme.error),
+      );
+      return;
+    }
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surfaceCard,
+        title: Text('Kullanıcıyı Sil', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppTheme.error)),
+        content: Text(
+          '${user.fullName} (${user.email}) kullanıcısı ve tüm profil verileri Firestore veritabanından KALICI OLARAK silinecektir.\n\nBu işlem geri alınamaz!',
+          style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textPrimary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Vazgeç', style: TextStyle(color: AppTheme.textTertiary)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error),
+            child: const Text('Kalıcı Olarak Sil'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        await _firestore.collection(AppConstants.usersCollection).doc(user.uid).delete();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${user.fullName} hesabı başarıyla silindi.'),
+              backgroundColor: AppTheme.success,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Silme hatası: $e'), backgroundColor: AppTheme.error),
+          );
+        }
       }
     }
   }

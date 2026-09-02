@@ -517,101 +517,152 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _showForgotPasswordDialog() {
-    final resetEmailController = TextEditingController();
+    context.read<AuthProvider>().clearError();
+    final resetEmailController = TextEditingController(text: _emailController.text.trim());
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.white,
-        surfaceTintColor: Colors.transparent,
-        title: Text(
-          'Şifre Sıfırlama',
-          style: GoogleFonts.outfit(
-            color: const Color(0xFF111827),
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'E-posta adresinizi girin. Şifre sıfırlama bağlantısı göndereceğiz.',
-              style: GoogleFonts.inter(
-                color: const Color(0xFF4B5563),
-                fontSize: 14,
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: resetEmailController,
-              keyboardType: TextInputType.emailAddress,
-              style: GoogleFonts.inter(color: const Color(0xFF111827)),
-              decoration: InputDecoration(
-                filled: true,
-                fillColor: const Color(0xFFF9FAFB),
-                labelText: 'E-posta',
-                labelStyle: GoogleFonts.inter(color: const Color(0xFF4B5563)),
-                hintText: 'ornek@email.com',
-                hintStyle: GoogleFonts.inter(color: const Color(0xFF9CA3AF)),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: AppTheme.primary, width: 2),
-                ),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            style: TextButton.styleFrom(
-              foregroundColor: const Color(0xFF4B5563),
-            ),
-            child: const Text('İptal'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (resetEmailController.text.isNotEmpty) {
-                final authProvider = context.read<AuthProvider>();
-                final success =
-                    await authProvider.resetPassword(resetEmailController.text);
+      builder: (context) {
+        bool isLoading = false;
+        String? errorMessage;
 
-                if (context.mounted) {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        success
-                            ? 'Şifre sıfırlama e-postası gönderildi.'
-                            : authProvider.errorMessage ?? 'Hata oluştu.',
-                      ),
-                      backgroundColor: success ? AppTheme.success : AppTheme.error,
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            Future<void> submitReset() async {
+              final email = resetEmailController.text.trim();
+              if (email.isEmpty) {
+                setDialogState(() {
+                  errorMessage = 'Lütfen e-posta adresinizi girin.';
+                });
+                return;
+              }
+
+              if (!email.contains('@') || !email.contains('.')) {
+                setDialogState(() {
+                  errorMessage = 'Geçerli bir e-posta adresi girin.';
+                });
+                return;
+              }
+
+              setDialogState(() {
+                isLoading = true;
+                errorMessage = null;
+              });
+
+              final messenger = ScaffoldMessenger.of(context);
+              final authProvider = dialogContext.read<AuthProvider>();
+              final success = await authProvider.resetPassword(email);
+
+              if (dialogContext.mounted) {
+                if (success) {
+                  Navigator.pop(dialogContext);
+                  messenger.showSnackBar(
+                    const SnackBar(
+                      content: Text('Şifre sıfırlama e-postası gönderildi. Lütfen e-postanızı ve spam klasörünüzü kontrol edin.'),
+                      backgroundColor: AppTheme.success,
+                      duration: Duration(seconds: 4),
                     ),
                   );
+                } else {
+                  setDialogState(() {
+                    isLoading = false;
+                    errorMessage = authProvider.errorMessage ?? 'Şifre sıfırlama e-postası gönderilemedi.';
+                  });
                 }
               }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primary,
-              foregroundColor: AppTheme.textOnPrimary,
+            }
+
+            return AlertDialog(
+              backgroundColor: Colors.white,
+              surfaceTintColor: Colors.transparent,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(16),
               ),
-            ),
-            child: const Text('Gönder'),
-          ),
-        ],
-      ),
+              title: Text(
+                'Şifre Sıfırlama',
+                style: GoogleFonts.outfit(
+                  color: const Color(0xFF111827),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'E-posta adresinizi girin. Şifre sıfırlama bağlantısı gönderilecektir.',
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFF4B5563),
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: resetEmailController,
+                    keyboardType: TextInputType.emailAddress,
+                    textInputAction: TextInputAction.done,
+                    enabled: !isLoading,
+                    onSubmitted: (_) => submitReset(),
+                    style: GoogleFonts.inter(color: const Color(0xFF111827)),
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: const Color(0xFFF9FAFB),
+                      labelText: 'E-posta Adresi',
+                      labelStyle: GoogleFonts.inter(color: const Color(0xFF4B5563)),
+                      hintText: 'ornek@email.com',
+                      hintStyle: GoogleFonts.inter(color: const Color(0xFF9CA3AF)),
+                      errorText: errorMessage,
+                      errorMaxLines: 2,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: AppTheme.primary, width: 2),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isLoading ? null : () => Navigator.pop(dialogContext),
+                  style: TextButton.styleFrom(
+                    foregroundColor: const Color(0xFF4B5563),
+                  ),
+                  child: const Text('İptal'),
+                ),
+                ElevatedButton(
+                  onPressed: isLoading ? null : submitReset,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primary,
+                    foregroundColor: AppTheme.textOnPrimary,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: isLoading
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('Gönder'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }

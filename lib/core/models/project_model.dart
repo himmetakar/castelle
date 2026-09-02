@@ -34,7 +34,11 @@ class ProjectRole {
   final String? gender;         // 'male', 'female', 'other', null(farketmez)
   final int? heightMin;
   final int? heightMax;
+  final String? city;           // Aranan Şehir (Örn: İstanbul)
   final List<String> requiredSkills;
+  final List<String> requiredLanguages; // Aranan Diller (Örn: İngilizce)
+  final List<String> requiredHobbies;   // Aranan Hobiler (Örn: Binicilik)
+  final String? appearance;     // Görünüm / Saç (Örn: Esmer, Sarışın, Kumral)
   final int quota;              // Kaç kişi alınacak
   final double? budget;         // Rol bütçesi
   final String? backgroundAudioUrl; // Audition kaydı sırasında çalacak arka plan sesi
@@ -49,7 +53,11 @@ class ProjectRole {
     this.gender,
     this.heightMin,
     this.heightMax,
+    this.city,
     this.requiredSkills = const [],
+    this.requiredLanguages = const [],
+    this.requiredHobbies = const [],
+    this.appearance,
     this.quota = 1,
     this.budget,
     this.backgroundAudioUrl,
@@ -66,10 +74,20 @@ class ProjectRole {
       gender: map['gender'],
       heightMin: map['heightMin'] != null ? int.tryParse(map['heightMin'].toString()) : null,
       heightMax: map['heightMax'] != null ? int.tryParse(map['heightMax'].toString()) : null,
+      city: map['city'],
       requiredSkills: (map['requiredSkills'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList() ??
           [],
+      requiredLanguages: (map['requiredLanguages'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [],
+      requiredHobbies: (map['requiredHobbies'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [],
+      appearance: map['appearance'],
       quota: map['quota'] ?? 1,
       budget: map['budget'] != null ? double.tryParse(map['budget'].toString()) : null,
       backgroundAudioUrl: map['backgroundAudioUrl'] as String?,
@@ -87,7 +105,11 @@ class ProjectRole {
       'gender': gender,
       'heightMin': heightMin,
       'heightMax': heightMax,
+      'city': city,
       'requiredSkills': requiredSkills,
+      'requiredLanguages': requiredLanguages,
+      'requiredHobbies': requiredHobbies,
+      'appearance': appearance,
       'quota': quota,
       'budget': budget,
       'backgroundAudioUrl': backgroundAudioUrl,

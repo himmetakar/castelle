@@ -47,13 +47,30 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
   late TextEditingController _bankHolderController;
   late TextEditingController _hobbyInputController;
 
-  // Seçilen değerler
+  // Yeni Detaylı Alan Kontrolcüleri
+  late TextEditingController _bodyMeasurementsController;
+  late TextEditingController _shoeSizeController;
+  late TextEditingController _cvTextController;
+  late TextEditingController _accentInputController;
+  late TextEditingController _licenseInputController;
+  late TextEditingController _actingEduInputController;
+
+  // Seçilen değerler & Listeler
   Gender? _selectedGender;
   EyeColor? _selectedEyeColor;
   HairColor? _selectedHairColor;
   String? _selectedExperienceLevel;
   List<String> _skills = [];
   List<String> _hobbies = [];
+  List<String> _actingEducation = [];
+  List<String> _theaterExperience = [];
+  List<String> _seriesExperience = [];
+  List<String> _movieExperience = [];
+  List<String> _commercialExperience = [];
+  Map<String, String> _languageLevels = {};
+  List<String> _accents = [];
+  List<String> _drivingLicense = [];
+  List<Map<String, dynamic>> _projectVideos = [];
 
   bool _isInitialized = false;
   String? _processingVideoKey; // Şu an sıkıştırılan/yüklenen video anahtarı
@@ -76,6 +93,13 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
     _bankIbanController = TextEditingController();
     _bankHolderController = TextEditingController();
     _hobbyInputController = TextEditingController();
+
+    _bodyMeasurementsController = TextEditingController();
+    _shoeSizeController = TextEditingController();
+    _cvTextController = TextEditingController();
+    _accentInputController = TextEditingController();
+    _licenseInputController = TextEditingController();
+    _actingEduInputController = TextEditingController();
   }
 
   @override
@@ -111,6 +135,19 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
       _selectedExperienceLevel = profile.experienceLevel;
       _skills = List.from(profile.skills);
       _hobbies = List.from(profile.hobbies);
+
+      _bodyMeasurementsController.text = profile.bodyMeasurements ?? '';
+      _shoeSizeController.text = profile.shoeSize ?? '';
+      _cvTextController.text = profile.cvText ?? '';
+      _actingEducation = List.from(profile.actingEducation);
+      _theaterExperience = List.from(profile.theaterExperience);
+      _seriesExperience = List.from(profile.seriesExperience);
+      _movieExperience = List.from(profile.movieExperience);
+      _commercialExperience = List.from(profile.commercialExperience);
+      _languageLevels = Map.from(profile.languageLevels);
+      _accents = List.from(profile.accents);
+      _drivingLicense = List.from(profile.drivingLicense);
+      _projectVideos = List.from(profile.projectVideos);
     } else {
       final authProvider = context.read<AuthProvider>();
       final user = authProvider.user;
@@ -137,6 +174,13 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
     _bankIbanController.dispose();
     _bankHolderController.dispose();
     _hobbyInputController.dispose();
+
+    _bodyMeasurementsController.dispose();
+    _shoeSizeController.dispose();
+    _cvTextController.dispose();
+    _accentInputController.dispose();
+    _licenseInputController.dispose();
+    _actingEduInputController.dispose();
     super.dispose();
   }
 
@@ -146,18 +190,33 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
     final authProvider = context.read<AuthProvider>();
     final profileProvider = context.read<ActorProfileProvider>();
     final uid = authProvider.user!.uid;
-
     final currentProfile = profileProvider.profile;
+    final fullName = _fullNameController.text.trim();
+    final email = authProvider.user?.email ?? '';
+    final phone = _phoneController.text.trim();
+    final photo = currentProfile?.profilePhotoUrl;
+
+    final isFullNameValid = fullName.isNotEmpty;
+    final isEmailValid = email.isNotEmpty;
+    final isPhoneValid = phone.isNotEmpty;
+    final isPhotoValid = photo != null && photo.isNotEmpty;
+
+    final canSubmitForApproval = isFullNameValid && isEmailValid && isPhoneValid && isPhotoValid;
+
+    String targetApprovalStatus = currentProfile?.approvalStatus ?? 'draft';
+    if (canSubmitForApproval && (targetApprovalStatus == 'draft' || targetApprovalStatus == 'incomplete' || targetApprovalStatus == 'rejected')) {
+      targetApprovalStatus = 'pending';
+    }
 
     final profile = ActorProfileModel(
       uid: uid,
-      fullName: _fullNameController.text.trim(),
-      email: authProvider.user!.email,
-      phone: _phoneController.text.trim(),
+      fullName: fullName,
+      email: email,
+      phone: phone,
       emergencyPhone: _emergencyPhoneController.text.trim().isEmpty ? null : _emergencyPhoneController.text.trim(),
       bankIban: _bankIbanController.text.trim().isEmpty ? null : _bankIbanController.text.trim(),
       bankAccountHolder: _bankHolderController.text.trim().isEmpty ? null : _bankHolderController.text.trim(),
-      profilePhotoUrl: currentProfile?.profilePhotoUrl,
+      profilePhotoUrl: photo,
       age: int.tryParse(_ageController.text),
       gender: _selectedGender,
       heightCm: int.tryParse(_heightController.text),
@@ -181,22 +240,63 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
       lockedSections: currentProfile?.lockedSections ?? const {},
       isHidden: currentProfile?.isHidden ?? false,
       acceptedNdas: currentProfile?.acceptedNdas ?? const [],
+      approvalStatus: targetApprovalStatus,
+      bodyMeasurements: _bodyMeasurementsController.text.trim().isEmpty ? null : _bodyMeasurementsController.text.trim(),
+      shoeSize: _shoeSizeController.text.trim().isEmpty ? null : _shoeSizeController.text.trim(),
+      actingEducation: _actingEducation,
+      theaterExperience: _theaterExperience,
+      seriesExperience: _seriesExperience,
+      movieExperience: _movieExperience,
+      commercialExperience: _commercialExperience,
+      languageLevels: _languageLevels,
+      accents: _accents,
+      drivingLicense: _drivingLicense,
+      cvPdfUrl: currentProfile?.cvPdfUrl,
+      cvText: _cvTextController.text.trim().isEmpty ? null : _cvTextController.text.trim(),
+      projectVideos: _projectVideos,
     );
 
     final success = await profileProvider.saveProfile(profile);
 
     if (mounted) {
       if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Profil başarıyla kaydedildi!'),
-            backgroundColor: AppTheme.success,
-          ),
-        );
-        setState(() {
-          _forceClose = true;
-        });
-        Navigator.pop(context);
+        if (!canSubmitForApproval) {
+          final missingList = <String>[];
+          if (!isFullNameValid) missingList.add('• Ad Soyad');
+          if (!isEmailValid) missingList.add('• E-posta');
+          if (!isPhoneValid) missingList.add('• Telefon');
+          if (!isPhotoValid) missingList.add('• Profil Resmi / Fotoğraf');
+
+          showDialog(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              backgroundColor: AppTheme.surfaceCard,
+              title: Text('Profil Onaya Sunulamadı ⚠️', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppTheme.warning)),
+              content: Text(
+                'Profil taslağınız kaydedildi; ancak admin onayına sunulabilmesi için aşağıdaki alanların doldurulması zorunludur:\n\n${missingList.join("\n")}',
+                style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textPrimary),
+              ),
+              actions: [
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accent),
+                  child: const Text('Tamamla'),
+                ),
+              ],
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Profiliniz kaydedildi ve Admin Onayına Sunuldu! 🚀'),
+              backgroundColor: AppTheme.success,
+            ),
+          );
+          setState(() {
+            _forceClose = true;
+          });
+          Navigator.pop(context);
+        }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -845,6 +945,29 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 16),
+
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildTextField(
+                        controller: _bodyMeasurementsController,
+                        label: 'Beden Ölçüleri',
+                        icon: Icons.straighten,
+                        hintText: 'Örn: 90-60-90 / M',
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: _buildTextField(
+                        controller: _shoeSizeController,
+                        label: 'Ayakkabı Numarası',
+                        icon: Icons.format_size,
+                        hintText: 'Örn: 38 / 42',
+                      ),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 28),
 
                 // ══════════════════════════════
@@ -882,12 +1005,75 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
                 const SizedBox(height: 28),
 
                 // ══════════════════════════════
+                // BÖLÜM 5.6: YABANCI DİLLER & DİL SEVİYELERİ
+                // ══════════════════════════════
+                _buildSectionHeader('Yabancı Diller & Seviyeleri', Icons.translate, profile, 'languages', profileProvider),
+                const SizedBox(height: 14),
+                _buildLanguagesEditor(),
+                const SizedBox(height: 28),
+
+                // ══════════════════════════════
+                // BÖLÜM 5.7: KATEGORİK DENEYİMLER VE OYUNCULUK EĞİTİMİ
+                // ══════════════════════════════
+                _buildSectionHeader('Eğitim ve Deneyim Detayları', Icons.school_outlined, profile, 'experiences', profileProvider),
+                const SizedBox(height: 14),
+                _buildCategoryListEditor('Oyunculuk Eğitimi', _actingEducation, _actingEduInputController, 'Örn: Craft Tiyatro, Şahika Tekand'),
+                const SizedBox(height: 12),
+                _buildCategoryListEditor('Tiyatro Deneyimi', _theaterExperience, TextEditingController(), 'Örn: Hamlet (2023) - Başrol'),
+                const SizedBox(height: 12),
+                _buildCategoryListEditor('Dizi Deneyimi', _seriesExperience, TextEditingController(), 'Örn: Yargı (2024) - Konuk Oyuncu'),
+                const SizedBox(height: 12),
+                _buildCategoryListEditor('Film Deneyimi', _movieExperience, TextEditingController(), 'Örn: Kuru Otlar Üstüne (2023)'),
+                const SizedBox(height: 12),
+                _buildCategoryListEditor('Reklam Deneyimi', _commercialExperience, TextEditingController(), 'Örn: Türk Telekom Reklamı (2024)'),
+                const SizedBox(height: 28),
+
+                // ══════════════════════════════
+                // BÖLÜM 5.8: AKSAN VE EHLİYET
+                // ══════════════════════════════
+                _buildSectionHeader('Aksan & Ehliyet', Icons.badge_outlined, profile, 'licenses', profileProvider),
+                const SizedBox(height: 14),
+                _buildCategoryListEditor('Aksan / Şive', _accents, _accentInputController, 'Örn: Ege, Karadeniz, İngiliz Aksanı'),
+                const SizedBox(height: 12),
+                _buildCategoryListEditor('Ehliyet Sınıfları', _drivingLicense, _licenseInputController, 'Örn: B Sınıfı Otomobil, A2 Motosiklet'),
+                const SizedBox(height: 28),
+
+                // ══════════════════════════════
+                // BÖLÜM 5.9: ÖZGEÇMİŞ / CV METNİ
+                // ══════════════════════════════
+                _buildSectionHeader('Özgeçmiş / CV Metni', Icons.description_outlined, profile, 'cv', profileProvider),
+                const SizedBox(height: 14),
+                TextFormField(
+                  controller: _cvTextController,
+                  maxLines: 5,
+                  style: const TextStyle(color: AppTheme.textPrimary),
+                  decoration: InputDecoration(
+                    labelText: 'Detaylı CV / Özgeçmiş Metni',
+                    hintText: 'Tüm oyunculuk geçmişinizi ve biyografinizi detaylıca yazabilirsiniz...',
+                    alignLabelWithHint: true,
+                    prefixIcon: const Padding(
+                      padding: EdgeInsets.only(bottom: 80),
+                      child: Icon(Icons.article_outlined, size: 20),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 28),
+
+                // ══════════════════════════════
                 // BÖLÜM 6: FİLMOGRAFİ (PROJELER)
                 // ══════════════════════════════
                 _buildSectionHeader('Filmografi (Projeler)', Icons.movie_creation_outlined, profile, 'filmography', profileProvider),
 
                 const SizedBox(height: 14),
                 _buildFilmographyEditor(profile),
+                const SizedBox(height: 28),
+
+                // ══════════════════════════════
+                // BÖLÜM 6.5: GEÇMİŞ PROJE VİDEOLARI
+                // ══════════════════════════════
+                _buildSectionHeader('Geçmiş Proje Videoları 🎬', Icons.video_library_outlined, profile, 'projectVideos', profileProvider),
+                const SizedBox(height: 14),
+                _buildProjectVideosEditor(profile),
                 const SizedBox(height: 28),
 
                 // ══════════════════════════════
@@ -1874,4 +2060,364 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
     );
   }
 
+  // ═══════════════════════════════════════
+  // YABANCI DİL EDİTÖRÜ
+  // ═══════════════════════════════════════
+  Widget _buildLanguagesEditor() {
+    final langController = TextEditingController();
+    String selectedLevel = 'Orta (B1/B2)';
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceCard,
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        border: Border.all(color: AppTheme.border.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (_languageLevels.isNotEmpty) ...[
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _languageLevels.entries.map((entry) {
+                return Chip(
+                  label: Text('${entry.key}: ${entry.value}'),
+                  deleteIcon: const Icon(Icons.close, size: 14),
+                  backgroundColor: AppTheme.accent.withValues(alpha: 0.15),
+                  onDeleted: () {
+                    setState(() {
+                      _languageLevels.remove(entry.key);
+                    });
+                  },
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 12),
+          ],
+          Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: TextField(
+                  controller: langController,
+                  style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+                  decoration: const InputDecoration(
+                    hintText: 'Dil (Örn: İngilizce)',
+                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 2,
+                child: DropdownButtonFormField<String>(
+                  value: selectedLevel,
+                  dropdownColor: AppTheme.surfaceCard,
+                  style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
+                  decoration: const InputDecoration(
+                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'Başlangıç (A1/A2)', child: Text('Başlangıç')),
+                    DropdownMenuItem(value: 'Orta (B1/B2)', child: Text('Orta')),
+                    DropdownMenuItem(value: 'İleri (C1/C2)', child: Text('İleri')),
+                    DropdownMenuItem(value: 'Ana Dil', child: Text('Ana Dil')),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) selectedLevel = val;
+                  },
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.add_circle, color: AppTheme.accent),
+                onPressed: () {
+                  final lang = langController.text.trim();
+                  if (lang.isNotEmpty) {
+                    setState(() {
+                      _languageLevels[lang] = selectedLevel;
+                    });
+                    langController.clear();
+                  }
+                },
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════
+  // GENEL KATEGORİK LİSTE EDİTÖRÜ (Eğitim, Tiyatro, Dizi, Film, Aksan vb.)
+  // ═══════════════════════════════════════
+  Widget _buildCategoryListEditor(
+    String title,
+    List<String> list,
+    TextEditingController controller,
+    String hintText,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceCard,
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        border: Border.all(color: AppTheme.border.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
+          ),
+          const SizedBox(height: 8),
+          if (list.isNotEmpty) ...[
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: list.map((item) {
+                return Chip(
+                  label: Text(item, style: const TextStyle(fontSize: 12)),
+                  deleteIcon: const Icon(Icons.close, size: 14),
+                  backgroundColor: AppTheme.primary.withValues(alpha: 0.08),
+                  onDeleted: () {
+                    setState(() {
+                      list.remove(item);
+                    });
+                  },
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 10),
+          ],
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+                  decoration: InputDecoration(
+                    hintText: hintText,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                  ),
+                  onSubmitted: (val) {
+                    final trimmed = val.trim();
+                    if (trimmed.isNotEmpty && !list.contains(trimmed)) {
+                      setState(() {
+                        list.add(trimmed);
+                      });
+                      controller.clear();
+                    }
+                  },
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.add_circle, color: AppTheme.accent),
+                onPressed: () {
+                  final trimmed = controller.text.trim();
+                  if (trimmed.isNotEmpty && !list.contains(trimmed)) {
+                    setState(() {
+                      list.add(trimmed);
+                    });
+                    controller.clear();
+                  }
+                },
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════
+  // GEÇMİŞ PROJE VİDEOLARI EDİTÖRÜ
+  // ═══════════════════════════════════════
+  Widget _buildProjectVideosEditor(ActorProfileModel? profile) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceCard,
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        border: Border.all(color: AppTheme.border.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Geçmiş Proje Videoları (${_projectVideos.length})',
+                style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
+              ),
+              TextButton.icon(
+                onPressed: _showAddProjectVideoDialog,
+                icon: const Icon(Icons.video_call, size: 18),
+                label: const Text('Video Ekle', style: TextStyle(fontSize: 12)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (_projectVideos.isEmpty)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Text(
+                  'Henüz geçmiş projelerinize ait bir video eklenmemiş.',
+                  style: GoogleFonts.inter(fontSize: 12.5, color: AppTheme.textTertiary),
+                ),
+              ),
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _projectVideos.length,
+              separatorBuilder: (_, __) => const Divider(height: 16, color: AppTheme.border),
+              itemBuilder: (context, index) {
+                final item = _projectVideos[index];
+                final title = item['title'] ?? 'Proje Videosu';
+                final projectType = item['projectType'] ?? 'Dizi/Film';
+                final videoUrl = item['videoUrl'] ?? '';
+
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: AppTheme.accent.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.play_circle_fill, color: AppTheme.accent, size: 24),
+                  ),
+                  title: Text(title, style: GoogleFonts.outfit(fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+                  subtitle: Text(projectType, style: GoogleFonts.inter(fontSize: 11.5, color: AppTheme.textTertiary)),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.open_in_new, size: 18, color: AppTheme.accent),
+                        onPressed: () => _launchProjectUrl(videoUrl),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline, size: 18, color: AppTheme.error),
+                        onPressed: () {
+                          setState(() {
+                            _projectVideos.removeAt(index);
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _showAddProjectVideoDialog() {
+    final titleController = TextEditingController();
+    final urlController = TextEditingController();
+    String selectedType = 'Dizi';
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: AppTheme.surfaceCard,
+              title: Text(
+                'Geçmiş Proje Videosu Ekle',
+                style: GoogleFonts.outfit(fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: titleController,
+                      style: const TextStyle(color: AppTheme.textPrimary),
+                      decoration: const InputDecoration(
+                        labelText: 'Video Başlığı / Proje Adı',
+                        hintText: 'Örn: Muhteşem Yüzyıl 42. Bölüm Sahnesi',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      value: selectedType,
+                      dropdownColor: AppTheme.surfaceCard,
+                      style: const TextStyle(color: AppTheme.textPrimary),
+                      decoration: const InputDecoration(labelText: 'Proje Türü'),
+                      items: const [
+                        DropdownMenuItem(value: 'Dizi', child: Text('Dizi Sahnesi')),
+                        DropdownMenuItem(value: 'Sinema', child: Text('Sinema Sahnesi')),
+                        DropdownMenuItem(value: 'Tiyatro', child: Text('Tiyatro Kaydı')),
+                        DropdownMenuItem(value: 'Reklam', child: Text('Reklam Filmi')),
+                        DropdownMenuItem(value: 'Klip', child: Text('Müzik Klipi')),
+                        DropdownMenuItem(value: 'Showreel', child: Text('Özel Showreel')),
+                      ],
+                      onChanged: (v) => setDialogState(() => selectedType = v ?? 'Dizi'),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: urlController,
+                      style: const TextStyle(color: AppTheme.textPrimary),
+                      decoration: const InputDecoration(
+                        labelText: 'Video Bağlantısı (YouTube / Vimeo / Drive)',
+                        hintText: 'https://youtube.com/watch?v=...',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('İptal', style: TextStyle(color: AppTheme.textTertiary)),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    final title = titleController.text.trim();
+                    final url = urlController.text.trim();
+
+                    if (title.isEmpty || url.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Lütfen başlık ve video bağlantısı girin.'), backgroundColor: AppTheme.warning),
+                      );
+                      return;
+                    }
+
+                    setState(() {
+                      _projectVideos.add({
+                        'title': title,
+                        'projectType': selectedType,
+                        'videoUrl': url,
+                        'addedAt': DateTime.now().toIso8601String(),
+                      });
+                    });
+
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Proje videosu eklendi.'), backgroundColor: AppTheme.success),
+                    );
+                  },
+                  child: const Text('Ekle'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
 }

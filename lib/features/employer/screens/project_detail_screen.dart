@@ -127,6 +127,9 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   bool _isActorSuitableForRole(ActorProfileModel actor, ProjectRole role) {
     final hasGender = role.gender != null && role.gender!.isNotEmpty;
     final hasAge = role.ageMin != null || role.ageMax != null;
+    final hasHeight = role.heightMin != null || role.heightMax != null;
+    final hasCity = role.city != null && role.city!.trim().isNotEmpty;
+    final hasAppearance = role.appearance != null && role.appearance!.trim().isNotEmpty;
 
     // 1. Cinsiyet kontrolü
     if (hasGender) {
@@ -141,6 +144,30 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       if (actor.age == null) return false;
       if (role.ageMin != null && actor.age! < role.ageMin!) return false;
       if (role.ageMax != null && actor.age! > role.ageMax!) return false;
+    }
+
+    // 3. Boy aralığı kontrolü
+    if (hasHeight) {
+      if (actor.heightCm == null) return false;
+      if (role.heightMin != null && actor.heightCm! < role.heightMin!) return false;
+      if (role.heightMax != null && actor.heightCm! > role.heightMax!) return false;
+    }
+
+    // 4. Şehir kontrolü
+    if (hasCity) {
+      if (actor.city == null || !_normalizeText(actor.city!).contains(_normalizeText(role.city!))) {
+        return false;
+      }
+    }
+
+    // 5. Görünüm / Saç rengi kontrolü
+    if (hasAppearance) {
+      final appNorm = _normalizeText(role.appearance!);
+      final hairNorm = actor.hairColor != null ? _normalizeText(actor.hairColor!.displayName) : '';
+      final bioNorm = actor.bio != null ? _normalizeText(actor.bio!) : '';
+      if (!hairNorm.contains(appNorm) && !bioNorm.contains(appNorm)) {
+        return false;
+      }
     }
 
     return true;
@@ -564,25 +591,348 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     );
   }
 
+  /// Karakter kriterlerine göre Oyuncu Uyumluluk Yüzdesi Hesaplama (%96, %91, %83 vb.)
+  int _calculateCompatibilityPercentage(ActorProfileModel actor, ProjectRole role) {
+    int criteriaCount = 0;
+    double matchScore = 0.0;
+
+    // 1. Cinsiyet Uyum Testi
+    if (role.gender != null && role.gender!.isNotEmpty) {
+      criteriaCount++;
+      if (actor.gender != null && role.gender == actor.gender!.value) {
+        matchScore += 1.0;
+      }
+    }
+
+    // 2. Yaş Aralığı Uyum Testi
+    if (role.ageMin != null || role.ageMax != null) {
+      criteriaCount++;
+      if (actor.age != null) {
+        final minOk = role.ageMin == null || actor.age! >= role.ageMin!;
+        final maxOk = role.ageMax == null || actor.age! <= role.ageMax!;
+        if (minOk && maxOk) {
+          matchScore += 1.0;
+        } else if ((role.ageMin != null && (actor.age! - role.ageMin!).abs() <= 2) ||
+                   (role.ageMax != null && (actor.age! - role.ageMax!).abs() <= 2)) {
+          matchScore += 0.7; // Yakın yaş uyumu
+        }
+      }
+    }
+
+    // 3. Şehir Uyum Testi
+    if (role.city != null && role.city!.trim().isNotEmpty) {
+      criteriaCount++;
+      if (actor.city != null && _normalizeText(actor.city!).contains(_normalizeText(role.city!))) {
+        matchScore += 1.0;
+      } else {
+        matchScore += 0.3;
+      }
+    }
+
+    // 4. Boy Aralığı Uyum Testi
+    if (role.heightMin != null || role.heightMax != null) {
+      criteriaCount++;
+      if (actor.heightCm != null) {
+        final minOk = role.heightMin == null || actor.heightCm! >= role.heightMin!;
+        final maxOk = role.heightMax == null || actor.heightCm! <= role.heightMax!;
+        if (minOk && maxOk) {
+          matchScore += 1.0;
+        } else if ((role.heightMin != null && (actor.heightCm! - role.heightMin!).abs() <= 3) ||
+                   (role.heightMax != null && (actor.heightCm! - role.heightMax!).abs() <= 3)) {
+          matchScore += 0.75;
+        }
+      }
+    }
+
+    // 5. Yetenek Uyum Testi
+    if (role.requiredSkills.isNotEmpty) {
+      criteriaCount++;
+      final actorSkills = actor.skills.map((s) => _normalizeText(s)).toSet();
+      final reqSkills = role.requiredSkills.map((s) => _normalizeText(s)).toSet();
+      final matched = actorSkills.intersection(reqSkills).length;
+      matchScore += (matched / reqSkills.length).clamp(0.0, 1.0);
+    }
+
+    // 6. Dil Uyum Testi
+    if (role.requiredLanguages.isNotEmpty) {
+      criteriaCount++;
+      final actorLangs = actor.languageLevels.keys.map((s) => _normalizeText(s)).toSet();
+      actorLangs.addAll(actor.skills.map((s) => _normalizeText(s)));
+      final reqLangs = role.requiredLanguages.map((s) => _normalizeText(s)).toSet();
+      final matched = actorLangs.intersection(reqLangs).length;
+      matchScore += (matched / reqLangs.length).clamp(0.0, 1.0);
+    }
+
+    // 7. Hobi Uyum Testi
+    if (role.requiredHobbies.isNotEmpty) {
+      criteriaCount++;
+      final actorHobbies = actor.hobbies.map((s) => _normalizeText(s)).toSet();
+      final reqHobbies = role.requiredHobbies.map((s) => _normalizeText(s)).toSet();
+      final matched = actorHobbies.intersection(reqHobbies).length;
+      matchScore += (matched / reqHobbies.length).clamp(0.0, 1.0);
+    }
+
+    // 8. Görünüm / Saç Rengi Uyum Testi
+    if (role.appearance != null && role.appearance!.trim().isNotEmpty) {
+      criteriaCount++;
+      final appNorm = _normalizeText(role.appearance!);
+      final hairNorm = actor.hairColor != null ? _normalizeText(actor.hairColor!.displayName) : '';
+      final bioNorm = actor.bio != null ? _normalizeText(actor.bio!) : '';
+      if (hairNorm.contains(appNorm) || bioNorm.contains(appNorm)) {
+        matchScore += 1.0;
+      } else {
+        matchScore += 0.5;
+      }
+    }
+
+    // Eğer hiç spesifik kriter belirtilmemişse genel profil kalitesi skoru ver
+    if (criteriaCount == 0) {
+      final base = actor.completionPercentage;
+      return (85 + (base * 0.14)).round().clamp(80, 99);
+    }
+
+    final percentage = ((matchScore / criteriaCount) * 100).round();
+    return percentage.clamp(60, 99);
+  }
+
+  /// Kriter Eşleşme Analizi (Eşleşen ve Eksik Kriterlerin Listesi)
+  Map<String, List<String>> _getCriteriaBreakdownDetails(ActorProfileModel actor, ProjectRole role) {
+    final List<String> matched = [];
+    final List<String> missing = [];
+
+    // 1. Cinsiyet
+    if (role.gender != null && role.gender!.isNotEmpty) {
+      if (actor.gender != null && role.gender == actor.gender!.value) {
+        matched.add('Cinsiyet (${actor.gender!.displayName})');
+      } else {
+        missing.add('Cinsiyet (${role.gender == 'female' ? 'Kadın' : 'Erkek'})');
+      }
+    }
+
+    // 2. Yaş Aralığı
+    if (role.ageMin != null || role.ageMax != null) {
+      final rangeText = '${role.ageMin ?? 0}–${role.ageMax ?? "∞"}';
+      if (actor.age != null) {
+        final minOk = role.ageMin == null || actor.age! >= role.ageMin!;
+        final maxOk = role.ageMax == null || actor.age! <= role.ageMax!;
+        if (minOk && maxOk) {
+          matched.add('Yaş ($rangeText)');
+        } else {
+          missing.add('Yaş (Oyuncu: ${actor.age}, Aranan: $rangeText)');
+        }
+      } else {
+        missing.add('Yaş ($rangeText)');
+      }
+    }
+
+    // 3. Şehir
+    if (role.city != null && role.city!.trim().isNotEmpty) {
+      if (actor.city != null && _normalizeText(actor.city!).contains(_normalizeText(role.city!))) {
+        matched.add('Şehir (${actor.city})');
+      } else {
+        missing.add('Şehir (${role.city})');
+      }
+    }
+
+    // 4. Boy
+    if (role.heightMin != null || role.heightMax != null) {
+      final rangeText = '${role.heightMin ?? 0}–${role.heightMax ?? "∞"} cm';
+      if (actor.heightCm != null) {
+        final minOk = role.heightMin == null || actor.heightCm! >= role.heightMin!;
+        final maxOk = role.heightMax == null || actor.heightCm! <= role.heightMax!;
+        if (minOk && maxOk) {
+          matched.add('Boy (${actor.heightCm} cm)');
+        } else {
+          missing.add('Boy (Oyuncu: ${actor.heightCm} cm, Aranan: $rangeText)');
+        }
+      } else {
+        missing.add('Boy ($rangeText)');
+      }
+    }
+
+    // 5. Yetenekler
+    for (final skill in role.requiredSkills) {
+      final actorSkills = actor.skills.map((s) => _normalizeText(s)).toSet();
+      if (actorSkills.contains(_normalizeText(skill))) {
+        matched.add('Yetenek: $skill');
+      } else {
+        missing.add('Yetenek: $skill');
+      }
+    }
+
+    // 6. Diller
+    for (final lang in role.requiredLanguages) {
+      final actorLangs = actor.languageLevels.keys.map((s) => _normalizeText(s)).toSet();
+      actorLangs.addAll(actor.skills.map((s) => _normalizeText(s)));
+      if (actorLangs.contains(_normalizeText(lang))) {
+        matched.add('Dil: $lang');
+      } else {
+        missing.add('Dil: $lang');
+      }
+    }
+
+    // 7. Hobiler
+    for (final hobby in role.requiredHobbies) {
+      final actorHobbies = actor.hobbies.map((s) => _normalizeText(s)).toSet();
+      if (actorHobbies.contains(_normalizeText(hobby))) {
+        matched.add('Hobi: $hobby');
+      } else {
+        missing.add('Hobi: $hobby');
+      }
+    }
+
+    // 8. Görünüm / Saç
+    if (role.appearance != null && role.appearance!.trim().isNotEmpty) {
+      final appNorm = _normalizeText(role.appearance!);
+      final hairNorm = actor.hairColor != null ? _normalizeText(actor.hairColor!.displayName) : '';
+      final bioNorm = actor.bio != null ? _normalizeText(actor.bio!) : '';
+      if (hairNorm.contains(appNorm) || bioNorm.contains(appNorm)) {
+        matched.add('Görünüm (${role.appearance})');
+      } else {
+        missing.add('Görünüm (${role.appearance})');
+      }
+    }
+
+    return {'matched': matched, 'missing': missing};
+  }
+
+  /// Admin için Detaylı Kriter Eşleşme İnceleme Diyaloğu
+  void _showCriteriaBreakdownDialog(ActorProfileModel actor, ProjectRole role) {
+    final percent = _calculateCompatibilityPercentage(actor, role);
+    final details = _getCriteriaBreakdownDetails(actor, role);
+    final matchedList = details['matched'] ?? [];
+    final missingList = details['missing'] ?? [];
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: AppTheme.surfaceCard,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radiusMd)),
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      actor.fullName,
+                      style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 18, color: AppTheme.textPrimary),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppTheme.success.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+                      border: Border.all(color: AppTheme.success),
+                    ),
+                    child: Text(
+                      '%$percent Uyumluluk',
+                      style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.success),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Rol: ${role.roleName}',
+                style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textTertiary),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Eşleşen Kriterler
+                Text(
+                  'Eşleşen Kriterler (${matchedList.length})',
+                  style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.success),
+                ),
+                const SizedBox(height: 8),
+                if (matchedList.isEmpty)
+                  Text('Tüm kriterler genel aralıkta değerlendirildi.', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textTertiary))
+                else
+                  ...matchedList.map((item) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.check_circle, color: AppTheme.success, size: 16),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              item,
+                              style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textPrimary, fontWeight: FontWeight.w500),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+
+                const SizedBox(height: 16),
+                const Divider(color: AppTheme.border),
+                const SizedBox(height: 12),
+
+                // Eksik Kriterler
+                Text(
+                  'Eksik Kriterler (${missingList.length})',
+                  style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.error),
+                ),
+                const SizedBox(height: 8),
+                if (missingList.isEmpty)
+                  Row(
+                    children: [
+                      const Icon(Icons.stars, color: AppTheme.accent, size: 16),
+                      const SizedBox(width: 8),
+                      Text('Harika! Tüm kriterler birebir eşleşiyor. 🎉', style: GoogleFonts.inter(fontSize: 12.5, color: AppTheme.accent)),
+                    ],
+                  )
+                else
+                  ...missingList.map((item) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.cancel, color: AppTheme.error, size: 16),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              item,
+                              style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textSecondary),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+              ],
+            ),
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx),
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary),
+              child: const Text('Kapat'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Widget _buildRoleAccordion(ProjectRole role, int index) {
-    // Uygun adayları bul ve yetenek eşleşmesine göre sırala
+    // Uygun adayları bul ve uyumluluk yüzdesine göre azalan sırala (%96 -> %91 -> %83)
     final roleCandidates = _allActors
         .where((actor) => _isActorSuitableForRole(actor, role))
         .toList();
 
-    // Yetenek eşleşme sayısını hesapla
-    int _skillMatchCount(ActorProfileModel actor) {
-      if (role.requiredSkills.isEmpty) return 0;
-      final actorSkillsNorm =
-          actor.skills.map((s) => _normalizeText(s)).toSet();
-      final roleSkillsNorm =
-          role.requiredSkills.map((s) => _normalizeText(s)).toSet();
-      return actorSkillsNorm.intersection(roleSkillsNorm).length;
-    }
-
-    // Eşleşme sayısına göre azalan sırala — eşleşenler üstte
     roleCandidates.sort((a, b) =>
-        _skillMatchCount(b).compareTo(_skillMatchCount(a)));
+        _calculateCompatibilityPercentage(b, role).compareTo(_calculateCompatibilityPercentage(a, role)));
 
     final isOpen = _expandedRoleIndex == index;
 
@@ -595,35 +945,47 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     final isAllSelected = unrequestedCandidates.isNotEmpty &&
         selectedIds.length == unrequestedCandidates.length;
 
-    // Eşleşme rozeti oluşturma yardımcısı
-    Widget? _matchBadge(ActorProfileModel actor) {
-      final count = _skillMatchCount(actor);
-      if (count == 0) return null;
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(
-          color: Colors.red.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-          border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.bolt, size: 11, color: Colors.red),
-            const SizedBox(width: 2),
-            Text(
-              '$count yetenek',
-              style: GoogleFonts.inter(
-                fontSize: 9,
-                fontWeight: FontWeight.w600,
-                color: Colors.red,
+    // Eşleşme yüzdesi rozeti (Örn: %96 Uyumluluk)
+    Widget _matchBadge(ActorProfileModel actor) {
+      final percent = _calculateCompatibilityPercentage(actor, role);
+      final isHighMatch = percent >= 90;
+      return GestureDetector(
+        onTap: () => _showCriteriaBreakdownDialog(actor, role),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: isHighMatch ? AppTheme.success.withValues(alpha: 0.12) : AppTheme.accent.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+            border: Border.all(color: isHighMatch ? AppTheme.success : AppTheme.accent, width: 1.0),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                isHighMatch ? Icons.verified : Icons.auto_awesome,
+                size: 12,
+                color: isHighMatch ? AppTheme.success : AppTheme.accent,
               ),
-            ),
-          ],
+              const SizedBox(width: 4),
+              Text(
+                '%$percent Uyumluluk',
+                style: GoogleFonts.outfit(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: isHighMatch ? AppTheme.success : AppTheme.accent,
+                ),
+              ),
+              const SizedBox(width: 2),
+              Icon(
+                Icons.info_outline,
+                size: 11,
+                color: isHighMatch ? AppTheme.success : AppTheme.accent,
+              ),
+            ],
+          ),
         ),
       );
     }
-
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -792,24 +1154,25 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                         final isSelected = selectedIds.contains(actor.uid);
                         final isRequested = _isCandidateRequestedForRole(actor.uid, role.roleName);
 
-                                                  final hasSkillMatch = _skillMatchCount(actor) > 0;
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: isRequested
-                                  ? AppTheme.surfaceLight.withOpacity(0.6)
-                                  : AppTheme.surfaceLight,
-                              borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                              border: Border.all(
-                                color: isSelected
-                                    ? AppTheme.accent.withValues(alpha: 0.4)
-                                    : (hasSkillMatch
-                                        ? Colors.red
-                                        : AppTheme.border.withValues(alpha: 0.5)),
-                                width: isSelected || hasSkillMatch ? 1.0 : 0.5,
-                              ),
+                        final percent = _calculateCompatibilityPercentage(actor, role);
+                        final hasHighMatch = percent >= 90;
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: isRequested
+                                ? AppTheme.surfaceLight.withValues(alpha: 0.6)
+                                : AppTheme.surfaceLight,
+                            borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                            border: Border.all(
+                              color: isSelected
+                                  ? AppTheme.accent.withValues(alpha: 0.4)
+                                  : (hasHighMatch
+                                      ? AppTheme.success.withValues(alpha: 0.5)
+                                      : AppTheme.border.withValues(alpha: 0.5)),
+                              width: isSelected || hasHighMatch ? 1.0 : 0.5,
                             ),
+                          ),
                           child: Row(
                             children: [
                               Checkbox(

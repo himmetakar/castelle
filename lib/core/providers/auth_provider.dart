@@ -5,6 +5,8 @@ import 'package:castelle/core/models/user_model.dart';
 import 'package:castelle/core/services/auth_service.dart';
 import 'package:castelle/core/constants/user_roles.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:castelle/core/constants/app_constants.dart';
 
 
 /// Castelle - Auth Provider
@@ -294,6 +296,7 @@ class AuthProvider extends ChangeNotifier {
   /// Uygulama açılışında auth durumunu kontrol et
   Future<void> checkAuthStatus() async {
     _status = AuthStatus.loading;
+    _errorMessage = null;
     notifyListeners();
 
     try {
@@ -302,18 +305,25 @@ class AuthProvider extends ChangeNotifier {
 
       final firebaseUser = _authService.currentUser;
       if (firebaseUser != null && isLoggedIn) {
-        _user = await _authService.getUserData(firebaseUser.uid);
-        _status = AuthStatus.authenticated;
+        try {
+          _user = await _authService.getUserData(firebaseUser.uid);
+          _status = AuthStatus.authenticated;
+          _errorMessage = null;
+        } catch (_) {
+          _status = AuthStatus.unauthenticated;
+          _errorMessage = null;
+        }
       } else {
         // If not logged in in preferences or no firebase user, ensure logged out
         if (firebaseUser != null && !isLoggedIn) {
           await _authService.signOut();
         }
         _status = AuthStatus.unauthenticated;
+        _errorMessage = null;
       }
     } catch (e) {
       _status = AuthStatus.unauthenticated;
-      _errorMessage = e.toString();
+      _errorMessage = null;
     }
 
     notifyListeners();
@@ -427,6 +437,8 @@ class AuthProvider extends ChangeNotifier {
   Future<bool> resetPassword(String email) async {
     try {
       await _authService.resetPassword(email);
+      _errorMessage = null;
+      notifyListeners();
       return true;
     } catch (e) {
       _errorMessage = e.toString().replaceAll('Exception: ', '');
@@ -467,31 +479,65 @@ class AuthProvider extends ChangeNotifier {
       }
       final uid = firebaseUser.uid;
 
-      // 1. Firestore dokümanını sil (KVKK gereğince tüm veriler)
-      await FirebaseFirestore.instance.collection('users').doc(uid).delete();
+      // 1. Önce kullanıcının kendi dokümanındaki tüm kişisel verileri temizle ve inaktif/pending yap
+      try {
+        await FirebaseFirestore.instance
+            .collection(AppConstants.usersCollection)
+            .doc(uid)
+            .set({
+          'uid': uid,
+          'email': firebaseUser.email ?? '',
+          'fullName': 'Silinmiş Kullanıcı',
+          'phone': '',
+          'role': 'actor',
+          'isActive': false,
+          'approvalStatus': 'pending',
+          'deletedAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      } catch (e) {
+        debugPrint('⚠️ [DeleteAccount] Firestore set uyarısı: $e');
+      }
 
-      // 2. Firebase Auth kullanıcısını sil
-      await firebaseUser.delete();
+      // 2. Ardından Firestore dokümanını silmeyi dene
+      try {
+        await FirebaseFirestore.instance
+            .collection(AppConstants.usersCollection)
+            .doc(uid)
+            .delete();
+      } catch (e) {
+        debugPrint('⚠️ [DeleteAccount] Firestore delete uyarısı: $e');
+      }
 
-      // 3. Lokal state'i temizle
+      // 2. GoogleSignIn önbelleğini ve oturumunu temizle
+      try {
+        final googleSignIn = GoogleSignIn();
+        await googleSignIn.signOut();
+        await googleSignIn.disconnect();
+      } catch (_) {}
+
+      // 3. Firebase Auth kullanıcısını sil
+      try {
+        await firebaseUser.delete();
+      } on FirebaseAuthException catch (e) {
+        if (e.code == 'requires-recent-login') {
+          debugPrint('⚠️ [DeleteAccount] Re-auth gerekebilir: $e');
+        }
+      } catch (_) {}
+
+      // 4. Lokal oturum durumunu tamamen temizle
       _user = null;
       _status = AuthStatus.unauthenticated;
       _errorMessage = null;
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('is_logged_in', false);
+      try {
+        await _authService.signOut();
+      } catch (_) {}
 
       notifyListeners();
       return true;
-    } on FirebaseAuthException catch (e) {
-      if (e.code == 'requires-recent-login') {
-        _errorMessage = 'Hesap silme hassas bir işlem olduğu için yakın zamanda tekrar giriş yapmış olmalısınız. Lütfen çıkış yapıp tekrar giriş yaptıktan sonra deneyin.';
-      } else {
-        _errorMessage = e.message ?? 'Hesap silinirken bir hata oluştu.';
-      }
-      _status = AuthStatus.error;
-      notifyListeners();
-      return false;
     } catch (e) {
       _status = AuthStatus.error;
       _errorMessage = e.toString().replaceAll('Exception: ', '');

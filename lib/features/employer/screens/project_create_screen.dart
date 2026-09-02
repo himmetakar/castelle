@@ -1774,7 +1774,6 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
           const SizedBox(height: 12),
 
           // Yaş + Kota
-
           Row(
             children: [
               Expanded(
@@ -1823,6 +1822,74 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
 
           const SizedBox(height: 12),
 
+          // Boy (cm) Min - Max
+          Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  controller: role.heightMinController,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  style: const TextStyle(color: AppTheme.textPrimary),
+                  decoration: const InputDecoration(
+                    labelText: 'Min Boy (cm)',
+                    hintText: 'Örn: 165',
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextFormField(
+                  controller: role.heightMaxController,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  style: const TextStyle(color: AppTheme.textPrimary),
+                  decoration: const InputDecoration(
+                    labelText: 'Max Boy (cm)',
+                    hintText: 'Örn: 175',
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 12),
+
+          // Şehir & Görünüm
+          Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  controller: role.cityController,
+                  style: const TextStyle(color: AppTheme.textPrimary),
+                  decoration: const InputDecoration(
+                    labelText: 'Aranan Şehir',
+                    hintText: 'Örn: İstanbul',
+                    prefixIcon: Icon(Icons.location_city, size: 18),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextFormField(
+                  controller: role.appearanceController,
+                  style: const TextStyle(color: AppTheme.textPrimary),
+                  decoration: const InputDecoration(
+                    labelText: 'Görünüm / Saç',
+                    hintText: 'Örn: Esmer, Sarışın',
+                    prefixIcon: Icon(Icons.face, size: 18),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 12),
+
           // Cinsiyet
           Row(
             children: [
@@ -1857,6 +1924,44 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
               });
             },
             maxSkills: 15,
+          ),
+          const SizedBox(height: 14),
+          Text(
+            'Aranan Yabancı Diller',
+            style: GoogleFonts.inter(
+              fontSize: 13,
+              color: AppTheme.textSecondary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 8),
+          SkillsInputWidget(
+            skills: role.requiredLanguages,
+            onSkillsChanged: (updatedLangs) {
+              setState(() {
+                role.requiredLanguages = updatedLangs;
+              });
+            },
+            maxSkills: 10,
+          ),
+          const SizedBox(height: 14),
+          Text(
+            'Aranan Hobiler & Özel Beceriler',
+            style: GoogleFonts.inter(
+              fontSize: 13,
+              color: AppTheme.textSecondary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 8),
+          SkillsInputWidget(
+            skills: role.requiredHobbies,
+            onSkillsChanged: (updatedHobbies) {
+              setState(() {
+                role.requiredHobbies = updatedHobbies;
+              });
+            },
+            maxSkills: 10,
           ),
         ],
       ),
@@ -2303,10 +2408,16 @@ class _RoleFormData {
   final TextEditingController auditionScriptController;
   final TextEditingController ageMinController;
   final TextEditingController ageMaxController;
+  final TextEditingController heightMinController;
+  final TextEditingController heightMaxController;
+  final TextEditingController cityController;
+  final TextEditingController appearanceController;
   final TextEditingController quotaController;
   final TextEditingController budgetController;
   String? gender;
   List<String> requiredSkills;
+  List<String> requiredLanguages;
+  List<String> requiredHobbies;
   String? backgroundAudioUrl; // Arka plan ses URL'si (Firebase Storage)
 
   _RoleFormData()
@@ -2316,9 +2427,15 @@ class _RoleFormData {
         auditionScriptController = TextEditingController(),
         ageMinController = TextEditingController(),
         ageMaxController = TextEditingController(),
+        heightMinController = TextEditingController(),
+        heightMaxController = TextEditingController(),
+        cityController = TextEditingController(),
+        appearanceController = TextEditingController(),
         quotaController = TextEditingController(text: '1'),
         budgetController = TextEditingController(),
         requiredSkills = [],
+        requiredLanguages = [],
+        requiredHobbies = [],
         backgroundAudioUrl = null;
 
   _RoleFormData.fromProjectRole(ProjectRole role)
@@ -2332,12 +2449,20 @@ class _RoleFormData {
             TextEditingController(text: role.ageMin?.toString() ?? ''),
         ageMaxController =
             TextEditingController(text: role.ageMax?.toString() ?? ''),
+        heightMinController =
+            TextEditingController(text: role.heightMin?.toString() ?? ''),
+        heightMaxController =
+            TextEditingController(text: role.heightMax?.toString() ?? ''),
+        cityController = TextEditingController(text: role.city ?? ''),
+        appearanceController = TextEditingController(text: role.appearance ?? ''),
         quotaController =
             TextEditingController(text: role.quota.toString()),
         budgetController =
             TextEditingController(text: role.budget?.toString() ?? ''),
         gender = role.gender,
         requiredSkills = List.from(role.requiredSkills),
+        requiredLanguages = List.from(role.requiredLanguages),
+        requiredHobbies = List.from(role.requiredHobbies),
         backgroundAudioUrl = role.backgroundAudioUrl;
 
   ProjectRole toProjectRole() {
@@ -2354,8 +2479,14 @@ class _RoleFormData {
           : auditionScriptController.text.trim(),
       ageMin: int.tryParse(ageMinController.text),
       ageMax: int.tryParse(ageMaxController.text),
+      heightMin: int.tryParse(heightMinController.text),
+      heightMax: int.tryParse(heightMaxController.text),
+      city: cityController.text.trim().isEmpty ? null : cityController.text.trim(),
+      appearance: appearanceController.text.trim().isEmpty ? null : appearanceController.text.trim(),
       gender: gender,
       requiredSkills: requiredSkills,
+      requiredLanguages: requiredLanguages,
+      requiredHobbies: requiredHobbies,
       quota: int.tryParse(quotaController.text) ?? 1,
       budget: double.tryParse(budgetController.text),
       backgroundAudioUrl: backgroundAudioUrl,
@@ -2369,6 +2500,10 @@ class _RoleFormData {
     auditionScriptController.dispose();
     ageMinController.dispose();
     ageMaxController.dispose();
+    heightMinController.dispose();
+    heightMaxController.dispose();
+    cityController.dispose();
+    appearanceController.dispose();
     quotaController.dispose();
     budgetController.dispose();
   }

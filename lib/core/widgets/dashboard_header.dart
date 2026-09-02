@@ -10,6 +10,8 @@ import 'package:castelle/core/constants/user_roles.dart';
 import 'package:castelle/features/actor/providers/actor_profile_provider.dart';
 import 'package:castelle/features/chat/screens/chat_list_screen.dart';
 
+import 'package:castelle/core/constants/app_constants.dart';
+
 /// Castelle - Dashboard Header
 /// Tüm roller için ortak dashboard başlık widget'ı
 
@@ -72,12 +74,7 @@ class DashboardHeader extends StatelessWidget {
                 Row(
                   children: [
                     if (onMenuPressed != null) ...[
-                      IconButton(
-                        icon: const Icon(Icons.menu, color: AppTheme.textPrimary),
-                        onPressed: onMenuPressed,
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                      ),
+                      _buildMenuButtonWithBadge(context, authProvider),
                       const SizedBox(width: 12),
                     ],
                     Image.asset(
@@ -258,6 +255,67 @@ class DashboardHeader extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildMenuButtonWithBadge(BuildContext context, AuthProvider authProvider) {
+    final isAdminOrMod = authProvider.isAdmin || authProvider.isModerator;
+    if (!isAdminOrMod) {
+      return IconButton(
+        icon: const Icon(Icons.menu, color: AppTheme.textPrimary),
+        onPressed: onMenuPressed,
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(),
+      );
+    }
+
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection(AppConstants.usersCollection)
+          .where('role', isEqualTo: 'actor')
+          .where('approvalStatus', isEqualTo: 'pending')
+          .snapshots(),
+      builder: (context, snapshot) {
+        final pendingCount = snapshot.data?.docs.length ?? 0;
+
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.menu, color: AppTheme.textPrimary, size: 26),
+              onPressed: onMenuPressed,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+            ),
+            if (pendingCount > 0)
+              Positioned(
+                top: -4,
+                right: -4,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: const BoxDecoration(
+                    color: AppTheme.error,
+                    shape: BoxShape.circle,
+                  ),
+                  constraints: const BoxConstraints(
+                    minWidth: 18,
+                    minHeight: 18,
+                  ),
+                  child: Center(
+                    child: Text(
+                      '$pendingCount',
+                      style: GoogleFonts.inter(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ).animate().scale(duration: 300.ms),
+              ),
+          ],
+        );
+      },
     );
   }
 }
