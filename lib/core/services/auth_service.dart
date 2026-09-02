@@ -132,9 +132,6 @@ class AuthService {
         .doc(uid)
         .set(updateData, SetOptions(merge: true));
   }
-      throw _handleAuthError(e);
-    }
-  }
 
   /// Email ile giriş — Firestore dokümanı yoksa otomatik oluşturur
   Future<UserModel> signInWithEmail({
