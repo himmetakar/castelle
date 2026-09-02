@@ -21,7 +21,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyCWojyTDMo7dMFF5xQrQOkRfNSjcbooIMg',
-    appId: '1:977939722051:android:26e1b5da9273acfc8a49f6',
+    appId: '1:977939722051:android:0933e402731f08098a49f6',
     messagingSenderId: '977939722051',
     projectId: 'castelle-ce64b',
     storageBucket: 'castelle-ce64b.firebasestorage.app',
