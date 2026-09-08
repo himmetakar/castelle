@@ -16,6 +16,13 @@ class AppConstants {
   static const String notificationsCollection = 'notifications';
   static const String skillsCollection = 'skills';
 
+  // Hassas profil alanları users/{uid} kök dokümanında değil,
+  // users/{uid}/private/contact alt dokümanında tutulur. Kök doküman oyuncu
+  // havuzu için tüm oturumlu kullanıcılara okunabilir; alt doküman sadece
+  // sahibine ve admin/moderatöre açıktır (bkz. firestore.rules).
+  static const String privateCollection = 'private';
+  static const String privateContactDoc = 'contact';
+
   // Storage Paths
   static const String profilePhotosPath = 'profile_photos';
   static const String auditionVideosPath = 'audition_videos';

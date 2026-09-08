@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:castelle/core/providers/auth_provider.dart';
 import 'package:castelle/core/theme/app_theme.dart';
+import 'package:castelle/core/widgets/delete_account_dialog.dart';
 import 'package:castelle/features/actor/screens/actor_cv_view_screen.dart';
 
 /// Castelle - Ortak Profil Ekranı
@@ -134,7 +135,7 @@ class ProfileScreen extends StatelessWidget {
                     _InfoItem(
                       icon: Icons.phone_outlined,
                       label: 'Telefon',
-                      value: user?.phone ?? '-',
+                      value: (user?.phone.isNotEmpty ?? false) ? user!.phone : '-',
                     ),
                     _InfoItem(
                       icon: Icons.badge_outlined,
@@ -198,6 +199,11 @@ class ProfileScreen extends StatelessWidget {
                       ),
                     ),
                   ).animate().fadeIn(delay: 600.ms),
+
+                  const SizedBox(height: 12),
+
+                  // Hesap silme
+                  const DeleteAccountButton().animate().fadeIn(delay: 650.ms),
 
                   const SizedBox(height: 40),
                 ],

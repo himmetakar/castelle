@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:castelle/core/constants/app_constants.dart';
+import 'package:castelle/core/services/private_profile_fields.dart';
 import 'package:castelle/core/models/actor_profile_model.dart';
 import 'package:castelle/core/models/notification_model.dart';
 import 'package:castelle/core/services/notification_service.dart';
@@ -108,7 +109,9 @@ class ActorProfileService {
           .doc(uid)
           .get();
       if (!doc.exists) return null;
-      return ActorProfileModel.fromMap(doc.data()!, uid);
+      final data = Map<String, dynamic>.from(doc.data()!);
+      data.addAll(await readPrivateFields(_firestore, uid));
+      return ActorProfileModel.fromMap(data, uid);
     } catch (e) {
       debugPrint('⚠️ [ActorProfileService.getActorProfile] Error: $e');
       return null;
@@ -118,6 +121,7 @@ class ActorProfileService {
   /// Oyuncu profilini kaydet/güncelle — direkt Firestore
   Future<void> saveActorProfile(ActorProfileModel profile) async {
     final data = profile.toMap();
+    final private = takePrivateFields(data);
     data['updatedAt'] = FieldValue.serverTimestamp();
     data['role'] = 'actor';
     data['isProfileComplete'] = profile.completionPercentage >= 70;
@@ -128,6 +132,8 @@ class ActorProfileService {
         .collection(AppConstants.usersCollection)
         .doc(profile.uid)
         .set(data, SetOptions(merge: true));
+
+    await writePrivateFields(_firestore, profile.uid, private);
   }
 
   /// Oyuncu profilini stream olarak dinle
@@ -136,9 +142,14 @@ class ActorProfileService {
         .collection(AppConstants.usersCollection)
         .doc(uid)
         .snapshots()
-        .map((doc) {
+        // ponytail: her snapshot'ta private dokümanı yeniden okuyor. Kendi
+        // profilini dinlemek için kullanılıyor, hacim düşük. Sıklık artarsa
+        // iki snapshot stream'ini birleştir.
+        .asyncMap((doc) async {
       if (!doc.exists) return null;
-      return ActorProfileModel.fromMap(doc.data()!, uid);
+      final data = Map<String, dynamic>.from(doc.data()!);
+      data.addAll(await readPrivateFields(_firestore, uid));
+      return ActorProfileModel.fromMap(data, uid);
     });
   }
 

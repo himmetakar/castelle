@@ -177,13 +177,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         textInputAction: TextInputAction.next,
                         style: const TextStyle(color: AppTheme.textPrimary),
                         decoration: const InputDecoration(
-                          labelText: 'Telefon',
+                          labelText: 'Telefon (isteğe bağlı)',
                           hintText: '05XX XXX XX XX',
                           prefixIcon: Icon(Icons.phone_outlined),
+                          helperText: 'Casting ekibinin size ulaşması için. Zorunlu değil.',
                         ),
+                        // App Store 5.1.1(v): telefon zorunlu olamaz — boş bırakılabilir,
+                        // girildiyse formatı doğrulanır.
                         validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Telefon numarası gerekli';
+                          if (value == null || value.trim().isEmpty) {
+                            return null;
                           }
                           if (value.replaceAll(RegExp(r'[^0-9]'), '').length <
                               10) {

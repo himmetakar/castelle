@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -416,6 +417,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ],
                               ),
                             ),
+                            // Demo girişleri sadece debug build'de görünür
+                            if (kDebugMode) ...[
                             const SizedBox(height: 24),
 
                             // Divider: veya hızlı giriş
@@ -577,6 +580,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                               ],
                             ).animate().fadeIn(delay: 720.ms),
+                            ],
 
 
                             // Footer Link (Sign Up)

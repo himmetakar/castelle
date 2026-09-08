@@ -14,6 +14,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:castelle/core/theme/app_theme.dart';
+import 'package:castelle/core/widgets/delete_account_dialog.dart';
 import 'package:castelle/core/models/actor_profile_model.dart';
 import 'package:castelle/core/providers/auth_provider.dart';
 import 'package:castelle/features/actor/providers/actor_profile_provider.dart';
@@ -724,6 +725,11 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
                     _buildVideosSection(profile, profileProvider),
                   ] else if (!authProvider.isActor || widget.isOwner) ...[
                     _buildLockedPlaceholder('Video Galerisi'),
+                  ],
+
+                  if (widget.isOwner) ...[
+                    const SizedBox(height: 32),
+                    const DeleteAccountButton(),
                   ],
 
                   const SizedBox(height: 40),

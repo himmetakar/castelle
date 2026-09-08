@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:castelle/core/models/user_model.dart';
@@ -258,7 +259,6 @@ class AuthProvider extends ChangeNotifier {
           'uid': uid,
           'email': email,
           'fullName': fullName,
-          'phone': phone,
           'role': 'actor',
           'isActive': true,
           'isProfileComplete': true,
@@ -294,15 +294,18 @@ class AuthProvider extends ChangeNotifier {
     _status = AuthStatus.loading;
     notifyListeners();
 
-    // Arka planda demo hesapları oluştur (bloklamaz)
-    seedDemoAccounts().catchError((e) {
-      debugPrint('⚠️ [AuthProvider] seed error: $e');
-    });
+    // Demo/mock hesap seed'i sadece debug build'de çalışır
+    if (kDebugMode) {
+      // Arka planda demo hesapları oluştur (bloklamaz)
+      seedDemoAccounts().catchError((e) {
+        debugPrint('⚠️ [AuthProvider] seed error: $e');
+      });
 
-    // Arka planda 8 oyuncu hesabı oluştur/güncelle (bloklamaz)
-    seedMockActors().catchError((e) {
-      debugPrint('⚠️ [AuthProvider] actor seed error: $e');
-    });
+      // Arka planda 8 oyuncu hesabı oluştur/güncelle (bloklamaz)
+      seedMockActors().catchError((e) {
+        debugPrint('⚠️ [AuthProvider] actor seed error: $e');
+      });
+    }
 
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -406,6 +409,29 @@ class AuthProvider extends ChangeNotifier {
     } catch (_) {}
     
     notifyListeners();
+  }
+
+  /// Hesabı kalıcı olarak sil ve oturumu kapat
+  Future<bool> deleteAccount(String password) async {
+    _errorMessage = null;
+    try {
+      await _authService.deleteAccount(password: password);
+    } catch (e) {
+      _errorMessage = e.toString().replaceAll('Exception: ', '');
+      notifyListeners();
+      return false;
+    }
+
+    _user = null;
+    _status = AuthStatus.unauthenticated;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('is_logged_in', false);
+    } catch (_) {}
+
+    notifyListeners();
+    return true;
   }
 
   /// Şifre sıfırlama

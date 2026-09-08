@@ -55,9 +55,10 @@ service cloud.firestore {
     // USERS KOLEKSİYONU
     // ═══════════════════════════════════════
     match /users/{userId} {
-      // Herkes kendi profilini okuyabilir
-      // Admin ve Moderatör tüm profilleri okuyabilir
-      allow read: if isOwner(userId) || isAdminOrModerator() || isDirector() || isEmployer();
+      // Oyuncu havuzu tüm rollere açık — oyuncular da birbirini görebiliyor.
+      // Kök dokümanda hassas alan yok; telefon ve banka bilgisi aşağıdaki
+      // private alt koleksiyonunda durur.
+      allow read: if isSignedIn();
 
       // Sadece kayıt sırasında oluşturulabilir (kendi uid'si ile)
       allow create: if isOwner(userId);
@@ -65,8 +66,14 @@ service cloud.firestore {
       // Kendi profilini güncelleyebilir, Admin herkesin rolünü değiştirebilir
       allow update: if isOwner(userId) || isAdmin();
 
-      // Sadece Admin silebilir
-      allow delete: if isAdmin();
+      // Admin silebilir, kullanıcı kendi hesabını silebilir (KVKK / store gereği)
+      allow delete: if isAdmin() || isOwner(userId);
+
+      // Hassas alanlar: telefon, IBAN, hesap sahibi adı.
+      // Sadece sahibi ve admin/moderatör okur/yazar.
+      match /private/{docId} {
+        allow read, write: if isOwner(userId) || isAdminOrModerator();
+      }
     }
 
     // ═══════════════════════════════════════
@@ -101,8 +108,8 @@ service cloud.firestore {
       // Yönetmen onay/ret yapabilir
       allow update: if isAdminOrModerator() || isDirector();
 
-      // Sadece Admin silebilir
-      allow delete: if isAdmin();
+      // Admin silebilir, oyuncu kendi başvurusunu (hesap silmede) silebilir
+      allow delete: if isAdmin() || (isSignedIn() && resource.data.actorId == request.auth.uid);
     }
 
     // ═══════════════════════════════════════
@@ -118,8 +125,8 @@ service cloud.firestore {
       // Okundu olarak işaretleme
       allow update: if isSignedIn() && (resource.data.userId == request.auth.uid || resource.data.recipientId == request.auth.uid);
 
-      // Sadece Admin silebilir
-      allow delete: if isAdmin();
+      // Admin silebilir, kullanıcı kendi bildirimlerini silebilir
+      allow delete: if isAdmin() || (isSignedIn() && (resource.data.userId == request.auth.uid || resource.data.recipientId == request.auth.uid));
     }
 
     // ═══════════════════════════════════════

@@ -1,7 +1,10 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/foundation.dart';
 import 'package:castelle/core/models/user_model.dart';
 import 'package:castelle/core/constants/app_constants.dart';
+import 'package:castelle/core/services/private_profile_fields.dart';
 import 'package:castelle/core/constants/user_roles.dart';
 
 /// Castelle - Firebase Auth Service
@@ -47,10 +50,7 @@ class AuthService {
         updatedAt: DateTime.now(),
       );
 
-      await _firestore
-          .collection(AppConstants.usersCollection)
-          .doc(user.uid)
-          .set({
+      final data = <String, dynamic>{
         ...userModel.toMap(),
         'isActive': true,
         // Oyuncu kayıtları admin onayı bekler
@@ -58,7 +58,14 @@ class AuthService {
           'approvalStatus': 'pending',
           'approvedAt': null,
         },
-      });
+      };
+      final private = takePrivateFields(data);
+
+      await _firestore
+          .collection(AppConstants.usersCollection)
+          .doc(user.uid)
+          .set(data);
+      await writePrivateFields(_firestore, user.uid, private);
 
       return userModel;
     } on FirebaseAuthException catch (e) {
@@ -88,7 +95,12 @@ class AuthService {
           .get();
 
       if (doc.exists) {
-        return UserModel.fromMap(doc.data()!, user.uid);
+        final data = Map<String, dynamic>.from(doc.data()!);
+        // Eski kayıtlarda telefon/banka kök dokümanda duruyor olabilir —
+        // kullanıcı kendi oturumunda bir kez alt dokümana taşınır.
+        await migratePrivateFields(_firestore, user.uid, data);
+        data.addAll(await readPrivateFields(_firestore, user.uid));
+        return UserModel.fromMap(data, user.uid);
       } else {
         // Firestore dokümanı yoksa otomatik oluştur (Firebase Console'dan eklenen hesaplar için)
         final role = _guessRoleFromEmail(email.trim());
@@ -101,15 +113,19 @@ class AuthService {
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
         );
-        await _firestore
-            .collection(AppConstants.usersCollection)
-            .doc(user.uid)
-            .set({
+        final data = <String, dynamic>{
           ...userModel.toMap(),
           'isActive': true,
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
-        });
+        };
+        final private = takePrivateFields(data);
+
+        await _firestore
+            .collection(AppConstants.usersCollection)
+            .doc(user.uid)
+            .set(data);
+        await writePrivateFields(_firestore, user.uid, private);
         return userModel;
       }
     } on FirebaseAuthException catch (e) {
@@ -161,21 +177,118 @@ class AuthService {
       throw Exception('Kullanıcı verisi bulunamadı.');
     }
 
-    return UserModel.fromMap(doc.data()!, uid);
+    final data = Map<String, dynamic>.from(doc.data()!);
+    if (uid == _auth.currentUser?.uid) {
+      await migratePrivateFields(_firestore, uid, data);
+    }
+    data.addAll(await readPrivateFields(_firestore, uid));
+
+    return UserModel.fromMap(data, uid);
   }
 
   /// Kullanıcı verisini güncelle
   Future<void> updateUserData(String uid, Map<String, dynamic> data) async {
+    final private = takePrivateFields(data);
     data['updatedAt'] = FieldValue.serverTimestamp();
     await _firestore
         .collection(AppConstants.usersCollection)
         .doc(uid)
         .update(data);
+    await writePrivateFields(_firestore, uid, private);
   }
 
   /// Çıkış yap
   Future<void> signOut() async {
     await _auth.signOut();
+  }
+
+  /// Hesabı kalıcı olarak sil.
+  /// Firestore verisi + Storage dosyaları + Firebase Auth kaydı.
+  /// Şifre ile yeniden kimlik doğrulama zorunlu (Firebase 'requires-recent-login').
+  Future<void> deleteAccount({required String password}) async {
+    final user = _auth.currentUser;
+    if (user == null) throw Exception('Oturum bulunamadı.');
+
+    final email = user.email;
+    if (email == null || email.isEmpty) {
+      throw Exception('Bu hesap e-posta ile giriş yapmadığı için silinemiyor.');
+    }
+
+    final uid = user.uid;
+
+    try {
+      await user.reauthenticateWithCredential(
+        EmailAuthProvider.credential(email: email, password: password),
+      );
+    } on FirebaseAuthException catch (e) {
+      throw _handleAuthError(e);
+    }
+
+    await _deleteUserContent(uid);
+
+    try {
+      await user.delete();
+    } on FirebaseAuthException catch (e) {
+      throw _handleAuthError(e);
+    }
+  }
+
+  /// Kullanıcıya ait Firestore dokümanlarını ve Storage dosyalarını sil.
+  Future<void> _deleteUserContent(String uid) async {
+    // Aynı doküman iki sorgudan da gelebilir — path ile tekilleştir.
+    final refs = <String, DocumentReference>{};
+
+    final queries = [
+      _firestore
+          .collection(AppConstants.auditionsCollection)
+          .where('actorId', isEqualTo: uid),
+      _firestore
+          .collection(AppConstants.notificationsCollection)
+          .where('userId', isEqualTo: uid),
+      _firestore
+          .collection(AppConstants.notificationsCollection)
+          .where('recipientId', isEqualTo: uid),
+    ];
+
+    for (final query in queries) {
+      final snap = await query.get();
+      for (final doc in snap.docs) {
+        refs[doc.reference.path] = doc.reference;
+      }
+    }
+
+    // Alt koleksiyon otomatik silinmez — hassas alanların dokümanını da ekle.
+    final privateRef = privateProfileRef(_firestore, uid);
+    refs[privateRef.path] = privateRef;
+
+    final userRef =
+        _firestore.collection(AppConstants.usersCollection).doc(uid);
+    refs[userRef.path] = userRef;
+
+    // ponytail: tek batch, 500 yazma limiti. Kullanıcı başına doküman sayısı
+    // bunu aşmaya başlarsa parça parça commit'e geç.
+    final batch = _firestore.batch();
+    for (final ref in refs.values) {
+      batch.delete(ref);
+    }
+    await batch.commit();
+
+    // Storage temizliği kritik değil — başarısız olursa hesap silme devam eder.
+    try {
+      await _deleteStorageFolder(
+          FirebaseStorage.instance.ref().child('profiles/$uid'));
+    } catch (e) {
+      debugPrint('⚠️ [DeleteAccount] Storage temizliği atlandı: $e');
+    }
+  }
+
+  /// Storage klasörünü alt klasörleriyle birlikte sil.
+  Future<void> _deleteStorageFolder(Reference ref) async {
+    final list = await ref.listAll();
+    await Future.wait([
+      ...list.items.map((item) => item.delete()),
+      ...list.prefixes.map(_deleteStorageFolder),
+    ]);
   }
 
   /// Şifre sıfırlama
