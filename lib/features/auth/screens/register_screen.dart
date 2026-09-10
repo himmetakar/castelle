@@ -9,7 +9,7 @@ import 'package:castelle/core/constants/user_roles.dart';
 import 'package:castelle/core/widgets/policy_dialogs.dart';
 
 /// Castelle - Register Screen
-/// Premium kayıt ekranı - Rol seçimli
+/// SMS tabanlı kayıt ekranı (Şifresiz)
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -21,28 +21,21 @@ class RegisterScreen extends StatefulWidget {
 class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
   final _fullNameController = TextEditingController();
-  final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
-  final _passwordController = TextEditingController();
-  final _confirmPasswordController = TextEditingController();
+  final _emailController = TextEditingController();
 
-  bool _obscurePassword = true;
-  bool _obscureConfirmPassword = true;
-  UserRole _selectedRole = UserRole.actor;
   bool _acceptedKvkk = false;
   bool _acceptedTermsAndPrivacy = false;
   bool _acceptedDataProcessing = false;
   bool _acceptedProfileSharing = false;
   bool _acceptedAuditionSharing = false;
-  bool _acceptedMarketingUse = false; // İsteğe bağlı
+  bool _acceptedMarketingUse = false;
 
   @override
   void dispose() {
     _fullNameController.dispose();
-    _emailController.dispose();
     _phoneController.dispose();
-    _passwordController.dispose();
-    _confirmPasswordController.dispose();
+    _emailController.dispose();
     super.dispose();
   }
 
@@ -64,18 +57,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
 
     final authProvider = context.read<AuthProvider>();
-    final success = await authProvider.register(
-      email: _emailController.text,
-      password: _passwordController.text,
-      fullName: _fullNameController.text,
-      phone: _phoneController.text,
-      role: _selectedRole.value,
-    );
+    final success = await authProvider.sendPhoneOtp(_phoneController.text.trim());
 
-    if (!success && mounted) {
+    if (success && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('SMS doğrulama kodu gönderildi. Lütfen kodu girerek kaydınızı tamamlayın.'),
+          backgroundColor: AppTheme.success,
+        ),
+      );
+      context.go('/login');
+    } else if (!success && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(authProvider.errorMessage ?? 'Kayıt başarısız.'),
+          content: Text(authProvider.errorMessage ?? 'SMS gönderimi başarısız.'),
           backgroundColor: AppTheme.error,
         ),
       );
@@ -152,7 +147,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         const SizedBox(height: 6),
 
                         Text(
-                          'Castelle platformuna katılın ve oyunculuk dünyasında yerinizi alın.',
+                          'Castelle platformuna telefon numaranız ile katılın.',
                           style: GoogleFonts.inter(
                             fontSize: 13,
                             color: const Color(0xFF6B7280),
@@ -197,37 +192,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                               const SizedBox(height: 16),
 
-                              // Email
-                              TextFormField(
-                                controller: _emailController,
-                                keyboardType: TextInputType.emailAddress,
-                                textInputAction: TextInputAction.next,
-                                style: GoogleFonts.inter(color: const Color(0xFF111827), fontSize: 14),
-                                decoration: InputDecoration(
-                                  labelText: 'E-posta',
-                                  hintText: 'ornek@email.com',
-                                  prefixIcon: const Icon(Icons.email_outlined, size: 20),
-                                  filled: true,
-                                  fillColor: const Color(0xFFF9FAFB),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                    borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
-                                  ),
-                                ),
-                                validator: (value) {
-                                  if (value == null || value.isEmpty) {
-                                    return 'E-posta gerekli';
-                                  }
-                                  if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
-                                      .hasMatch(value)) {
-                                    return 'Geçerli bir e-posta girin';
-                                  }
-                                  return null;
-                                },
-                              ).animate().fadeIn(delay: 400.ms),
-
-                              const SizedBox(height: 16),
-
                               // Telefon
                               TextFormField(
                                 controller: _phoneController,
@@ -235,7 +199,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 textInputAction: TextInputAction.next,
                                 style: GoogleFonts.inter(color: const Color(0xFF111827), fontSize: 14),
                                 decoration: InputDecoration(
-                                  labelText: 'Telefon',
+                                  labelText: 'Telefon Numarası',
                                   hintText: '05XX XXX XX XX',
                                   prefixIcon: const Icon(Icons.phone_outlined, size: 20),
                                   filled: true,
@@ -249,101 +213,33 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                   if (value == null || value.isEmpty) {
                                     return 'Telefon numarası gerekli';
                                   }
-                                  if (value.replaceAll(RegExp(r'[^0-9]'), '').length <
-                                      10) {
+                                  if (value.replaceAll(RegExp(r'[^0-9]'), '').length < 10) {
                                     return 'Geçerli bir telefon numarası girin';
                                   }
                                   return null;
                                 },
-                              ).animate().fadeIn(delay: 450.ms),
+                              ).animate().fadeIn(delay: 400.ms),
 
                               const SizedBox(height: 16),
 
-                              // Şifre
+                              // E-posta (İsteğe Bağlı)
                               TextFormField(
-                                controller: _passwordController,
-                                obscureText: _obscurePassword,
-                                textInputAction: TextInputAction.next,
-                                style: GoogleFonts.inter(color: const Color(0xFF111827), fontSize: 14),
-                                decoration: InputDecoration(
-                                  labelText: 'Şifre',
-                                  hintText: 'En az 6 karakter',
-                                  prefixIcon: const Icon(Icons.lock_outline, size: 20),
-                                  filled: true,
-                                  fillColor: const Color(0xFFF9FAFB),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                    borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
-                                  ),
-                                  suffixIcon: IconButton(
-                                    icon: Icon(
-                                      _obscurePassword
-                                          ? Icons.visibility_outlined
-                                          : Icons.visibility_off_outlined,
-                                      size: 20,
-                                    ),
-                                    onPressed: () {
-                                      setState(() {
-                                        _obscurePassword = !_obscurePassword;
-                                      });
-                                    },
-                                  ),
-                                ),
-                                validator: (value) {
-                                  if (value == null || value.isEmpty) {
-                                    return 'Şifre gerekli';
-                                  }
-                                  if (value.length < 6) {
-                                    return 'Şifre en az 6 karakter olmalı';
-                                  }
-                                  return null;
-                                },
-                              ).animate().fadeIn(delay: 500.ms),
-
-                              const SizedBox(height: 16),
-
-                              // Şifre Tekrar
-                              TextFormField(
-                                controller: _confirmPasswordController,
-                                obscureText: _obscureConfirmPassword,
+                                controller: _emailController,
+                                keyboardType: TextInputType.emailAddress,
                                 textInputAction: TextInputAction.done,
                                 style: GoogleFonts.inter(color: const Color(0xFF111827), fontSize: 14),
-                                onFieldSubmitted: (_) => _handleRegister(),
                                 decoration: InputDecoration(
-                                  labelText: 'Şifre Tekrar',
-                                  hintText: 'Şifrenizi tekrar girin',
-                                  prefixIcon: const Icon(Icons.lock_outline, size: 20),
+                                  labelText: 'E-posta Adresi (İsteğe Bağlı)',
+                                  hintText: 'ornek@email.com',
+                                  prefixIcon: const Icon(Icons.email_outlined, size: 20),
                                   filled: true,
                                   fillColor: const Color(0xFFF9FAFB),
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(10),
                                     borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
                                   ),
-                                  suffixIcon: IconButton(
-                                    icon: Icon(
-                                      _obscureConfirmPassword
-                                          ? Icons.visibility_outlined
-                                          : Icons.visibility_off_outlined,
-                                      size: 20,
-                                    ),
-                                    onPressed: () {
-                                      setState(() {
-                                        _obscureConfirmPassword =
-                                            !_obscureConfirmPassword;
-                                      });
-                                    },
-                                  ),
                                 ),
-                                validator: (value) {
-                                  if (value == null || value.isEmpty) {
-                                    return 'Şifre tekrarı gerekli';
-                                  }
-                                  if (value != _passwordController.text) {
-                                    return 'Şifreler eşleşmiyor';
-                                  }
-                                  return null;
-                                },
-                              ).animate().fadeIn(delay: 550.ms),
+                              ).animate().fadeIn(delay: 450.ms),
 
                               const SizedBox(height: 20),
 
@@ -520,11 +416,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                     ),
                                   ],
                                 ),
-                              ).animate().fadeIn(delay: 600.ms),
+                              ).animate().fadeIn(delay: 500.ms),
 
                               const SizedBox(height: 24),
 
-                              // Kayıt Ol Butonu
+                              // Kayıt Ol / SMS Gönder Butonu
                               SizedBox(
                                 width: double.infinity,
                                 height: 50,
@@ -568,7 +464,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                             ),
                                           )
                                         : Text(
-                                            'Hesap Oluştur',
+                                            'SMS Kodu Gönder & Kayıt Ol',
                                             style: GoogleFonts.outfit(
                                               fontSize: 16,
                                               fontWeight: FontWeight.w600,
@@ -577,64 +473,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                           ),
                                   ),
                                 ),
-                              ).animate().fadeIn(delay: 650.ms),
-
-                              const SizedBox(height: 12),
-
-                              // Google ile Kayıt Ol / Giriş Yap Butonu
-                              SizedBox(
-                                width: double.infinity,
-                                height: 50,
-                                child: OutlinedButton(
-                                  onPressed: authProvider.isLoading
-                                      ? null
-                                      : () async {
-                                          final success = await authProvider.signInWithGoogle();
-                                          if (success && mounted) {
-                                            // GoRouter will handle redirection
-                                          } else if (!success && mounted) {
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              SnackBar(
-                                                content: Text(authProvider.errorMessage ?? 'Google ile kayıt başarısız.'),
-                                                backgroundColor: AppTheme.error,
-                                              ),
-                                            );
-                                          }
-                                        },
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: const Color(0xFF374151),
-                                    backgroundColor: Colors.white,
-                                    side: const BorderSide(color: Color(0xFFD1D5DB), width: 1),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Image.network(
-                                        'https://www.gstatic.com/images/branding/product/2x/googleg_64dp.png',
-                                        height: 20,
-                                        width: 20,
-                                        errorBuilder: (context, error, stackTrace) => const Icon(
-                                          Icons.g_mobiledata_rounded,
-                                          color: Colors.red,
-                                          size: 24,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Text(
-                                        'Google ile Kayıt Ol / Giriş Yap',
-                                        style: GoogleFonts.inter(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600,
-                                          color: const Color(0xFF374151),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ).animate().fadeIn(delay: 700.ms),
+                              ).animate().fadeIn(delay: 550.ms),
                             ],
                           ),
                         ),
@@ -666,7 +505,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               ),
                             ],
                           ),
-                        ).animate().fadeIn(delay: 750.ms),
+                        ).animate().fadeIn(delay: 600.ms),
                       ],
                     ),
                   ),

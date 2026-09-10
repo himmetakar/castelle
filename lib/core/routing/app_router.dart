@@ -4,6 +4,7 @@ import 'package:castelle/features/auth/screens/splash_screen.dart';
 import 'package:castelle/features/auth/screens/login_screen.dart';
 import 'package:castelle/features/auth/screens/register_screen.dart';
 import 'package:castelle/features/auth/screens/onboarding_screen.dart';
+import 'package:castelle/features/auth/screens/email_setup_screen.dart';
 import 'package:castelle/core/widgets/role_based_shell.dart';
 
 /// Castelle - App Router
@@ -16,20 +17,22 @@ class AppRouter {
       refreshListenable: authProvider,
       redirect: (context, state) {
         final isAuthenticated = authProvider.isAuthenticated;
-        final isLoading = authProvider.status == AuthStatus.initial ||
-            authProvider.status == AuthStatus.loading;
+        final isInitialLoading = authProvider.status == AuthStatus.initial;
         final isAuthRoute = state.matchedLocation == '/login' ||
             state.matchedLocation == '/register' ||
             state.matchedLocation == '/onboarding';
         final isSplash = state.matchedLocation == '/';
+        final isEmailSetup = state.matchedLocation == '/email-setup';
+        final user = authProvider.user;
+        final hasEmail = user != null && user.email.trim().isNotEmpty;
 
         // 0. Splash ekranında 2 saniye dolana kadar kalmaya zorla
         if (isSplash && !SplashScreen.splashPassed) {
           return null;
         }
 
-        // 1. Eğer henüz yükleniyorsa
-        if (isLoading) {
+        // 1. İlk uygulama açılışında yükleniyorsa splash ekranında kal
+        if (isInitialLoading) {
           return isSplash ? null : '/';
         }
 
@@ -43,7 +46,15 @@ class AppRouter {
 
         // 3. Yükleme tamamlandı ve kullanıcı giriş yapmış
         if (isAuthenticated) {
-          if (isSplash || isAuthRoute) {
+          // E-posta henüz tanımlanmamışsa E-posta Tanımlama Ekranına yönlendir
+          if (!hasEmail) {
+            if (!isEmailSetup) {
+              return '/email-setup';
+            }
+            return null;
+          }
+
+          if (isSplash || isAuthRoute || isEmailSetup) {
             return '/home';
           }
           return null;
@@ -70,6 +81,10 @@ class AppRouter {
         GoRoute(
           path: '/onboarding',
           builder: (context, state) => const OnboardingScreen(),
+        ),
+        GoRoute(
+          path: '/email-setup',
+          builder: (context, state) => const EmailSetupScreen(),
         ),
 
         // Main App Shell - Rol bazlı

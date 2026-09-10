@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -5,7 +6,6 @@ import 'package:castelle/core/models/user_model.dart';
 import 'package:castelle/core/services/auth_service.dart';
 import 'package:castelle/core/constants/user_roles.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 import 'package:castelle/core/constants/app_constants.dart';
 
 
@@ -27,6 +27,11 @@ class AuthProvider extends ChangeNotifier {
   UserModel? _user;
   String? _errorMessage;
 
+  // Phone Auth State
+  String? _verificationId;
+  bool _codeSent = false;
+  String? _phoneNumber;
+
   // Getters
   AuthStatus get status => _status;
   UserModel? get user => _user;
@@ -34,6 +39,9 @@ class AuthProvider extends ChangeNotifier {
   bool get isAuthenticated => _status == AuthStatus.authenticated;
   bool get isLoading => _status == AuthStatus.loading;
   UserRole? get userRole => _user?.role;
+  String? get verificationId => _verificationId;
+  bool get codeSent => _codeSent;
+  String? get phoneNumber => _phoneNumber;
 
   // Rol bazlı kontroller
   bool get isAdmin => _user?.role == UserRole.admin;
@@ -56,10 +64,10 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  /// Demo hesapları Firebase Auth + Firestore'da oluştur.
-  /// Zaten varsa atla. SHA-1 Firebase'e eklendiği için artık sorunsuz çalışır.
+  /// Demo ve Admin hesaplarını Firebase Auth + Firestore'da oluştur ve senkronize et.
   static Future<void> seedDemoAccounts() async {
     final authService = AuthService();
+    await authService.syncAndPromoteAdminUsers();
 
     for (final role in UserRole.values) {
       final email = demoEmail(role);
@@ -300,6 +308,9 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      // Admin hesapları (Yağmur ve Alican) rol kontrolü ve ikilik senkronizasyonu
+      await _authService.syncAndPromoteAdminUsers();
+
       final prefs = await SharedPreferences.getInstance();
       final isLoggedIn = prefs.getBool('is_logged_in') ?? false;
 
@@ -307,14 +318,20 @@ class AuthProvider extends ChangeNotifier {
       if (firebaseUser != null && isLoggedIn) {
         try {
           _user = await _authService.getUserData(firebaseUser.uid);
-          _status = AuthStatus.authenticated;
-          _errorMessage = null;
         } catch (_) {
-          _status = AuthStatus.unauthenticated;
-          _errorMessage = null;
+          _user = UserModel(
+            uid: firebaseUser.uid,
+            email: firebaseUser.email ?? '',
+            fullName: firebaseUser.displayName ?? '',
+            phone: firebaseUser.phoneNumber ?? '',
+            role: UserRole.actor,
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          );
         }
+        _status = AuthStatus.authenticated;
+        _errorMessage = null;
       } else {
-        // If not logged in in preferences or no firebase user, ensure logged out
         if (firebaseUser != null && !isLoggedIn) {
           await _authService.signOut();
         }
@@ -393,15 +410,145 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  /// Google ile Giriş / Kayıt
-  Future<bool> signInWithGoogle() async {
+  /// SMS Kodu Gönder (Telefon Numarası ile)
+  Future<bool> sendPhoneOtp(String rawPhone) async {
+    _status = AuthStatus.loading;
+    _errorMessage = null;
+    _codeSent = false;
+    notifyListeners();
+
+    final completer = Completer<bool>();
+    bool autoVerified = false;
+
+    try {
+      String formattedPhone = rawPhone.replaceAll(RegExp(r'[^0-9+]'), '');
+      if (formattedPhone.startsWith('0')) {
+        formattedPhone = '+90${formattedPhone.substring(1)}';
+      } else if (!formattedPhone.startsWith('+')) {
+        formattedPhone = '+90$formattedPhone';
+      }
+
+      _phoneNumber = formattedPhone;
+
+      await _authService.verifyPhoneNumber(
+        phoneNumber: formattedPhone,
+        onCodeSent: (verificationId) {
+          if (autoVerified) return;
+          _verificationId = verificationId;
+          _codeSent = true;
+          _status = AuthStatus.unauthenticated;
+          _errorMessage = null;
+          notifyListeners();
+          if (!completer.isCompleted) completer.complete(true);
+        },
+        onError: (error) {
+          if (autoVerified) return;
+          _status = AuthStatus.error;
+          _errorMessage = error.toString().replaceAll('Exception: ', '');
+          notifyListeners();
+          if (!completer.isCompleted) completer.complete(false);
+        },
+        onAutoVerify: (credential) async {
+          autoVerified = true;
+          try {
+            final userCred = await FirebaseAuth.instance.signInWithCredential(credential);
+            if (userCred.user != null) {
+              final uid = userCred.user!.uid;
+              final phone = userCred.user!.phoneNumber ?? '';
+
+              try {
+                _user = await _authService.getUserData(uid);
+              } catch (_) {
+                final cleanPhone = AuthService.normalizePhone(phone);
+                final designatedAdmin = AuthService.designatedAdmins.firstWhere(
+                  (a) => a['cleanPhone'] == cleanPhone,
+                  orElse: () => {},
+                );
+                final isDesignatedAdmin = designatedAdmin.isNotEmpty;
+                final assignedRole = isDesignatedAdmin ? UserRole.admin : UserRole.actor;
+                final assignedName = isDesignatedAdmin ? designatedAdmin['name']! : '';
+                final assignedEmail = isDesignatedAdmin ? designatedAdmin['email']! : '';
+
+                _user = UserModel(
+                  uid: uid,
+                  email: assignedEmail,
+                  fullName: assignedName,
+                  phone: phone,
+                  role: assignedRole,
+                  createdAt: DateTime.now(),
+                  updatedAt: DateTime.now(),
+                );
+
+                await FirebaseFirestore.instance
+                    .collection(AppConstants.usersCollection)
+                    .doc(uid)
+                    .set({
+                  ..._user!.toMap(),
+                  'isActive': true,
+                  'approvalStatus': isDesignatedAdmin ? 'approved' : 'pending',
+                  'createdAt': FieldValue.serverTimestamp(),
+                  'updatedAt': FieldValue.serverTimestamp(),
+                });
+              }
+              _codeSent = false;
+              _verificationId = null;
+              _status = AuthStatus.authenticated;
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.setBool('is_logged_in', true);
+              notifyListeners();
+              if (!completer.isCompleted) completer.complete(true);
+            }
+          } catch (e) {
+            _status = AuthStatus.error;
+            _errorMessage = e.toString().replaceAll('Exception: ', '');
+            notifyListeners();
+            if (!completer.isCompleted) completer.complete(false);
+          }
+        },
+      );
+
+      return await completer.future.timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          if (!completer.isCompleted) {
+            _status = AuthStatus.error;
+            _errorMessage = 'SMS gönderme zaman aşımına uğradı. Lütfen tekrar deneyin.';
+            notifyListeners();
+            completer.complete(false);
+          }
+          return false;
+        },
+      );
+    } catch (e) {
+      _status = AuthStatus.error;
+      _errorMessage = e.toString().replaceAll('Exception: ', '');
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// SMS Kodunu Doğrula ve Giriş Yap
+  Future<bool> verifyPhoneOtp(String smsCode) async {
+    if (_verificationId == null) {
+      _errorMessage = 'Doğrulama kimliği bulunamadı. Lütfen tekrar SMS kodu isteyin.';
+      notifyListeners();
+      return false;
+    }
+
     _status = AuthStatus.loading;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      _user = await _authService.signInWithGoogle();
+      _user = await _authService.signInWithPhoneCredential(
+        verificationId: _verificationId!,
+        smsCode: smsCode,
+      );
       _status = AuthStatus.authenticated;
+
+      // Telefon doğrulama state'ini sıfırla
+      _codeSent = false;
+      _verificationId = null;
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('is_logged_in', true);
@@ -416,6 +563,49 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  /// SMS Girişi Sonrası E-posta Tanımlama / Güncelleme
+  Future<bool> saveEmailAndDetails({
+    required String email,
+    required String fullName,
+    required UserRole role,
+  }) async {
+    if (_user == null) {
+      _errorMessage = 'Giriş yapmış kullanıcı bulunamadı.';
+      notifyListeners();
+      return false;
+    }
+
+    _status = AuthStatus.loading;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      _user = await _authService.updateUserEmailAndDetails(
+        uid: _user!.uid,
+        email: email,
+        fullName: fullName,
+        role: role.value,
+      );
+
+      _status = AuthStatus.authenticated;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _status = AuthStatus.error;
+      _errorMessage = e.toString().replaceAll('Exception: ', '');
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Telefon Giriş Durumunu Sıfırla
+  void resetPhoneAuth() {
+    _verificationId = null;
+    _codeSent = false;
+    _phoneNumber = null;
+    notifyListeners();
+  }
+
   /// Çıkış yap
   Future<void> signOut() async {
     try {
@@ -424,6 +614,9 @@ class AuthProvider extends ChangeNotifier {
     _user = null;
     _status = AuthStatus.unauthenticated;
     _errorMessage = null;
+    _verificationId = null;
+    _codeSent = false;
+    _phoneNumber = null;
     
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -508,13 +701,6 @@ class AuthProvider extends ChangeNotifier {
       } catch (e) {
         debugPrint('⚠️ [DeleteAccount] Firestore delete uyarısı: $e');
       }
-
-      // 2. GoogleSignIn önbelleğini ve oturumunu temizle
-      try {
-        final googleSignIn = GoogleSignIn();
-        await googleSignIn.signOut();
-        await googleSignIn.disconnect();
-      } catch (_) {}
 
       // 3. Firebase Auth kullanıcısını sil
       try {

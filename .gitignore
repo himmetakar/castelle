@@ -48,3 +48,4 @@ app.*.map.json
 key.properties
 *.jks
 *.keystore
+upload_certificate.pem
