@@ -22,11 +22,35 @@
           }
         },
         {
-          "client_id": "977939722051-cutrh2taqk09s85p1vrpm5evq0cr9pt3.apps.googleusercontent.com",
+          "client_id": "977939722051-565lj66pbn749gu7b5tqksn44qa2ljkb.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.castelleapp.app",
-            "certificate_hash": "bca35fc27a163f6eb77434033c3375b6457e1b61"
+            "certificate_hash": "3a6fbfdb851a1e74be6e358b90846a0958284912"
+          }
+        },
+        {
+          "client_id": "977939722051-65n2g3l2ncnq7d2cuf86e486emhj66s8.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.castelleapp.app",
+            "certificate_hash": "499bcd351a37825bda553128cf1d85106989785a"
+          }
+        },
+        {
+          "client_id": "977939722051-7o9avjil9v41j92rtunefd4lhb186eif.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.castelleapp.app",
+            "certificate_hash": "ee8dbaf4fccb9e78bfe936289320f75cc97cbc43"
+          }
+        },
+        {
+          "client_id": "977939722051-8dke8kkum91grfjrkjvaust31g58ffgt.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.castelleapp.app",
+            "certificate_hash": "81af3657999ce68da342b6c03d15660309c4a442"
           }
         },
         {
@@ -74,11 +98,43 @@
       },
       "oauth_client": [
         {
+          "client_id": "977939722051-1k6kc6lih0f8o4b0cuh0ufbgrb3m81ec.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.castelleapp.castle48",
+            "certificate_hash": "499bcd351a37825bda553128cf1d85106989785a"
+          }
+        },
+        {
+          "client_id": "977939722051-9s9petdnc4sj1ls1j9oo1jbmdf4ncq3g.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.castelleapp.castle48",
+            "certificate_hash": "c8cc23f8f6bdab115043e42541c9e2e756c4e2cc"
+          }
+        },
+        {
           "client_id": "977939722051-dddl29mdj6qo2atafvhrts737qn8encf.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.castelleapp.castle48",
             "certificate_hash": "3a6fbfdb851a1e74be6e358b90846a0958284912"
+          }
+        },
+        {
+          "client_id": "977939722051-jvdfl581pe2iubau10duih0a3jgmu25g.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.castelleapp.castle48",
+            "certificate_hash": "ee8dbaf4fccb9e78bfe936289320f75cc97cbc43"
+          }
+        },
+        {
+          "client_id": "977939722051-rd55nghp01prkbkk66ln8kjd1a0a53nt.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.castelleapp.castle48",
+            "certificate_hash": "e905a98167819251e4cbbd0844914bbe65c06df9"
           }
         },
         {

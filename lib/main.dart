@@ -64,11 +64,6 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  // Telefon doğrulaması test modunu aç (reCAPTCHA / SafetyNet engellerini kaldırır)
-  await FirebaseAuth.instance.setSettings(
-    appVerificationDisabledForTesting: true,
-  );
-
   // Sadece giriş yapmış kullanıcı varsa arka plan temizleme işlemlerini çalıştır
   if (FirebaseAuth.instance.currentUser != null) {
     _cleanupMockData().catchError((_) {});
