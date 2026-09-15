@@ -32,7 +32,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.castelleapp.castle48"
+        applicationId = "com.castelle.castelle"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

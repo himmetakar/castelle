@@ -7,6 +7,7 @@ import 'package:castelle/core/services/auth_service.dart';
 import 'package:castelle/core/constants/user_roles.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:castelle/core/constants/app_constants.dart';
+import 'package:castelle/core/services/private_profile_fields.dart';
 
 
 /// Castelle - Auth Provider
@@ -306,7 +307,6 @@ class AuthProvider extends ChangeNotifier {
           'uid': uid,
           'email': firebaseUser.email ?? '',
           'fullName': 'Silinmiş Kullanıcı',
-          'phone': '',
           'role': 'actor',
           'isActive': false,
           'approvalStatus': 'pending',
@@ -317,7 +317,13 @@ class AuthProvider extends ChangeNotifier {
         debugPrint('⚠️ [DeleteAccount] Firestore set uyarısı: $e');
       }
 
-      // 2. Ardından Firestore dokümanını silmeyi dene
+      // 2. Ardından Firestore dokümanını silmeyi dene.
+      // Alt koleksiyon otomatik silinmez — hassas alanların dokümanı önce silinir.
+      try {
+        await privateProfileRef(FirebaseFirestore.instance, uid).delete();
+      } catch (e) {
+        debugPrint('⚠️ [DeleteAccount] Private doküman silme uyarısı: $e');
+      }
       try {
         await FirebaseFirestore.instance
             .collection(AppConstants.usersCollection)

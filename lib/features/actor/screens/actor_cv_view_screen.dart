@@ -14,6 +14,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:castelle/core/services/actor_profile_service.dart';
+import 'package:castelle/core/services/private_profile_fields.dart';
 import 'package:castelle/core/widgets/policy_dialogs.dart';
 import 'package:castelle/core/theme/app_theme.dart';
 import 'package:castelle/core/models/actor_profile_model.dart';
@@ -122,8 +123,11 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
           .doc(actorId)
           .get();
       if (doc.exists && mounted) {
+        // Telefon/IBAN/veli telefonu: yetki yoksa boş gelir (sadece admin/moderatör görür).
+        final private = await readPrivateFields(FirebaseFirestore.instance, doc.id);
+        if (!mounted) return;
         setState(() {
-          _loadedActor = ActorProfileModel.fromMap(doc.data()!, doc.id);
+          _loadedActor = ActorProfileModel.fromMap({...doc.data()!, ...private}, doc.id);
           _isLoadingActor = false;
         });
       } else {

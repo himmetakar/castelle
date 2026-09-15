@@ -9,6 +9,7 @@ import 'package:castelle/core/constants/user_roles.dart';
 import 'package:castelle/core/models/user_model.dart';
 import 'package:castelle/core/models/actor_profile_model.dart';
 import 'package:castelle/core/providers/auth_provider.dart';
+import 'package:castelle/core/services/private_profile_fields.dart';
 import 'package:castelle/features/admin/screens/actor_filter_screen.dart';
 import 'package:castelle/features/admin/screens/actor_detail_screen.dart';
 
@@ -372,7 +373,15 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
           IconButton(
             icon: const Icon(Icons.more_vert,
                 size: 20, color: AppTheme.textTertiary),
-            onPressed: () => _showUserActions(context, user),
+            onPressed: () async {
+              // Veli telefonu private alt dokümanda — sheet açılmadan önce okunur.
+              final private = await readPrivateFields(_firestore, user.uid);
+              if (!context.mounted) return;
+              _showUserActions(
+                context,
+                user.copyWith(guardianPhone: private['guardianPhone'] as String?),
+              );
+            },
           ),
         ],
       ),
