@@ -122,6 +122,14 @@
           }
         },
         {
+          "client_id": "977939722051-jmaa4hlb3a0dbf2b1qcrijgf53vheag0.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.castelleapp.castle48",
+            "certificate_hash": "81af3657999ce68da342b6c03d15660309c4a442"
+          }
+        },
+        {
           "client_id": "977939722051-jvdfl581pe2iubau10duih0a3jgmu25g.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {

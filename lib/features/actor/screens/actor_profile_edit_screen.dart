@@ -35,6 +35,8 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
   late TextEditingController _fullNameController;
   late TextEditingController _phoneController;
   late TextEditingController _emergencyPhoneController;
+  late TextEditingController _guardianNameController;
+  late TextEditingController _guardianPhoneController;
   late TextEditingController _ageController;
   late TextEditingController _heightController;
   late TextEditingController _weightController;
@@ -82,6 +84,8 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
     _fullNameController = TextEditingController();
     _phoneController = TextEditingController();
     _emergencyPhoneController = TextEditingController();
+    _guardianNameController = TextEditingController();
+    _guardianPhoneController = TextEditingController();
     _ageController = TextEditingController();
     _heightController = TextEditingController();
     _weightController = TextEditingController();
@@ -114,11 +118,15 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
   void _loadExistingProfile() {
     final profileProvider = context.read<ActorProfileProvider>();
     final profile = profileProvider.profile;
+    final authProvider = context.read<AuthProvider>();
+    final user = authProvider.user;
 
     if (profile != null) {
       _fullNameController.text = profile.fullName;
       _phoneController.text = profile.phone;
       _emergencyPhoneController.text = profile.emergencyPhone ?? '';
+      _guardianNameController.text = profile.guardianName ?? user?.guardianName ?? '';
+      _guardianPhoneController.text = profile.guardianPhone ?? user?.guardianPhone ?? '';
       _ageController.text = profile.age?.toString() ?? '';
       _heightController.text = profile.heightCm?.toString() ?? '';
       _weightController.text = profile.weightKg?.toString() ?? '';
@@ -149,11 +157,11 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
       _drivingLicense = List.from(profile.drivingLicense);
       _projectVideos = List.from(profile.projectVideos);
     } else {
-      final authProvider = context.read<AuthProvider>();
-      final user = authProvider.user;
       if (user != null) {
         _fullNameController.text = user.fullName;
         _phoneController.text = user.phone;
+        _guardianNameController.text = user.guardianName ?? '';
+        _guardianPhoneController.text = user.guardianPhone ?? '';
       }
     }
   }
@@ -163,6 +171,8 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
     _fullNameController.dispose();
     _phoneController.dispose();
     _emergencyPhoneController.dispose();
+    _guardianNameController.dispose();
+    _guardianPhoneController.dispose();
     _ageController.dispose();
     _heightController.dispose();
     _weightController.dispose();
@@ -214,6 +224,9 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
       email: email,
       phone: phone,
       emergencyPhone: _emergencyPhoneController.text.trim().isEmpty ? null : _emergencyPhoneController.text.trim(),
+      isUnder18: currentProfile?.isUnder18 ?? authProvider.user?.isUnder18 ?? false,
+      guardianName: _guardianNameController.text.trim().isEmpty ? null : _guardianNameController.text.trim(),
+      guardianPhone: _guardianPhoneController.text.trim().isEmpty ? null : _guardianPhoneController.text.trim(),
       bankIban: _bankIbanController.text.trim().isEmpty ? null : _bankIbanController.text.trim(),
       bankAccountHolder: _bankHolderController.text.trim().isEmpty ? null : _bankHolderController.text.trim(),
       profilePhotoUrl: photo,
@@ -837,6 +850,53 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
                   keyboardType: TextInputType.phone,
                 ),
                 const SizedBox(height: 16),
+
+                if ((profile?.isUnder18 == true) ||
+                    (context.watch<AuthProvider>().user?.isUnder18 == true) ||
+                    _guardianNameController.text.isNotEmpty ||
+                    _guardianPhoneController.text.isNotEmpty) ...[
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.amber.withValues(alpha: 0.4)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.child_care, color: Colors.amber, size: 20),
+                            const SizedBox(width: 8),
+                            Text(
+                              '🔞 Veli / Ebeveyn İletişim Bilgileri',
+                              style: GoogleFonts.outfit(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.amber,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        _buildTextField(
+                          controller: _guardianNameController,
+                          label: 'Veli Adı Soyadı',
+                          icon: Icons.person_outline,
+                        ),
+                        const SizedBox(height: 12),
+                        _buildTextField(
+                          controller: _guardianPhoneController,
+                          label: 'Veli Telefon Numarası',
+                          icon: Icons.phone_outlined,
+                          keyboardType: TextInputType.phone,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
 
                 Row(
                   children: [

@@ -451,6 +451,40 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                           color: AppTheme.textTertiary,
                         ),
                       ),
+                      if (user.isUnder18) ...[
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: Colors.amber.shade700.withValues(alpha: 0.4)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '🔞 18 Yaş Altı Kullanıcı (Veli Onayı Bekliyor)',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.amber.shade900,
+                                ),
+                              ),
+                              if (user.guardianName != null && user.guardianName!.isNotEmpty)
+                                Text(
+                                  '👤 Veli Adı: ${user.guardianName}',
+                                  style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textPrimary),
+                                ),
+                              if (user.guardianPhone != null && user.guardianPhone!.isNotEmpty)
+                                Text(
+                                  '📞 Veli Tel: ${user.guardianPhone}',
+                                  style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textPrimary),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),

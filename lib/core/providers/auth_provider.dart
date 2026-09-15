@@ -96,6 +96,9 @@ class AuthProvider extends ChangeNotifier {
     required String fullName,
     required String phone,
     required String role,
+    bool isUnder18 = false,
+    String? guardianName,
+    String? guardianPhone,
   }) async {
     _status = AuthStatus.loading;
     _errorMessage = null;
@@ -108,6 +111,9 @@ class AuthProvider extends ChangeNotifier {
         fullName: fullName,
         phone: phone,
         role: role,
+        isUnder18: isUnder18,
+        guardianName: guardianName,
+        guardianPhone: guardianPhone,
       );
       _status = AuthStatus.authenticated;
       
@@ -153,14 +159,22 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  /// Google / Gmail ile Giriş Yap
-  Future<bool> signInWithGoogle() async {
+  /// Google / Gmail ile Giriş Yap / Kayıt Ol
+  Future<bool> signInWithGoogle({
+    bool isUnder18 = false,
+    String? guardianName,
+    String? guardianPhone,
+  }) async {
     _status = AuthStatus.loading;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      final userModel = await _authService.signInWithGoogle();
+      final userModel = await _authService.signInWithGoogle(
+        isUnder18: isUnder18,
+        guardianName: guardianName,
+        guardianPhone: guardianPhone,
+      );
       if (userModel == null) {
         // Giriş kullanıcı tarafından iptal edildi
         _status = AuthStatus.unauthenticated;

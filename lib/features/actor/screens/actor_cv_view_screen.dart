@@ -3069,6 +3069,70 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
                 ),
               ),
 
+              if (profile.isUnder18 || (profile.guardianName != null && profile.guardianName!.isNotEmpty) || (profile.guardianPhone != null && profile.guardianPhone!.isNotEmpty)) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.amber.withValues(alpha: 0.5)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.child_care, size: 18, color: Colors.amber),
+                          const SizedBox(width: 8),
+                          Text(
+                            '🔞 18 YAŞ ALTI VELİ BİLGİLERİ',
+                            style: GoogleFonts.outfit(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.amber,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      if (profile.guardianName != null && profile.guardianName!.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Text(
+                            '👤 Veli Adı Soyadı: ${profile.guardianName}',
+                            style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textPrimary, fontWeight: FontWeight.w500),
+                          ),
+                        ),
+                      if (profile.guardianPhone != null && profile.guardianPhone!.isNotEmpty)
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '📞 Veli Telefonu: ${profile.guardianPhone}',
+                                style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textPrimary, fontWeight: FontWeight.w500),
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.phone, size: 16, color: AppTheme.success),
+                              onPressed: () => _launchSocialUrl('tel:${profile.guardianPhone}'),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.copy, size: 16, color: AppTheme.textTertiary),
+                              onPressed: () {
+                                Clipboard.setData(ClipboardData(text: profile.guardianPhone!));
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Veli telefonu kopyalandı.')),
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+
               const Divider(height: 24),
               
               Text(

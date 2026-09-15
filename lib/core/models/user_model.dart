@@ -20,6 +20,8 @@ class UserModel {
   final DateTime? birthDate; // Doğum tarihi
   final int? age; // Yaş
   final bool isUnder18; // 18 yaş altı mı?
+  final String? guardianName; // Veli Ad Soyadı
+  final String? guardianPhone; // Veli Telefon Numarası
   final bool isGuardianApproved; // Veli / Yasal temsilci onayladı mı?
   final String guardianApprovalStatus; // 'pending', 'approved', 'rejected'
   final bool hasAcceptedTerms; // Sözleşmeler ve KVKK onaylandı mı?
@@ -41,6 +43,8 @@ class UserModel {
     this.birthDate,
     this.age,
     this.isUnder18 = false,
+    this.guardianName,
+    this.guardianPhone,
     this.isGuardianApproved = false,
     this.guardianApprovalStatus = 'pending',
     this.hasAcceptedTerms = false,
@@ -81,6 +85,8 @@ class UserModel {
       birthDate: parseDate(map['birthDate']),
       age: parsedAge,
       isUnder18: under18Flag,
+      guardianName: map['guardianName'],
+      guardianPhone: map['guardianPhone'],
       isGuardianApproved: map['isGuardianApproved'] ?? false,
       guardianApprovalStatus: map['guardianApprovalStatus'] ?? (under18Flag ? 'pending' : 'approved'),
       hasAcceptedTerms: map['hasAcceptedTerms'] ?? false,
@@ -105,6 +111,8 @@ class UserModel {
       'birthDate': birthDate?.toIso8601String(),
       'age': age,
       'isUnder18': isUnder18,
+      'guardianName': guardianName,
+      'guardianPhone': guardianPhone,
       'isGuardianApproved': isGuardianApproved,
       'guardianApprovalStatus': guardianApprovalStatus,
       'hasAcceptedTerms': hasAcceptedTerms,
@@ -126,6 +134,8 @@ class UserModel {
     DateTime? birthDate,
     int? age,
     bool? isUnder18,
+    String? guardianName,
+    String? guardianPhone,
     bool? isGuardianApproved,
     String? guardianApprovalStatus,
     bool? hasAcceptedTerms,
@@ -147,6 +157,8 @@ class UserModel {
       birthDate: birthDate ?? this.birthDate,
       age: age ?? this.age,
       isUnder18: isUnder18 ?? this.isUnder18,
+      guardianName: guardianName ?? this.guardianName,
+      guardianPhone: guardianPhone ?? this.guardianPhone,
       isGuardianApproved: isGuardianApproved ?? this.isGuardianApproved,
       guardianApprovalStatus: guardianApprovalStatus ?? this.guardianApprovalStatus,
       hasAcceptedTerms: hasAcceptedTerms ?? this.hasAcceptedTerms,

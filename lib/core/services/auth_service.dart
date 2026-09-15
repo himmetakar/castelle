@@ -155,6 +155,8 @@ class AuthService {
     DateTime? birthDate,
     int? age,
     bool isUnder18 = false,
+    String? guardianName,
+    String? guardianPhone,
     bool hasAcceptedTerms = true,
   }) async {
     try {
@@ -188,6 +190,8 @@ class AuthService {
         birthDate: birthDate,
         age: calculatedAge,
         isUnder18: under18,
+        guardianName: under18 ? guardianName?.trim() : null,
+        guardianPhone: under18 ? guardianPhone?.trim() : null,
         isGuardianApproved: !under18,
         guardianApprovalStatus: under18 ? 'pending' : 'approved',
         hasAcceptedTerms: hasAcceptedTerms,
@@ -294,7 +298,11 @@ class AuthService {
   }
 
   /// Google / Gmail ile Giriş Yap / Kayıt Ol
-  Future<UserModel?> signInWithGoogle() async {
+  Future<UserModel?> signInWithGoogle({
+    bool isUnder18 = false,
+    String? guardianName,
+    String? guardianPhone,
+  }) async {
     try {
       final GoogleSignIn googleSignIn = GoogleSignIn(
         serverClientId: '977939722051-78bh3stbhgh85rsub18ra2c0566l1gq7.apps.googleusercontent.com',
@@ -406,6 +414,11 @@ class AuthService {
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
           profilePhotoUrl: photoUrl,
+          isUnder18: isUnder18,
+          guardianName: isUnder18 ? guardianName?.trim() : null,
+          guardianPhone: isUnder18 ? guardianPhone?.trim() : null,
+          isGuardianApproved: !isUnder18,
+          guardianApprovalStatus: isUnder18 ? 'pending' : 'approved',
           hasAcceptedTerms: true,
           acceptedTermsAt: DateTime.now(),
         );
@@ -415,8 +428,9 @@ class AuthService {
             .doc(uid)
             .set({
           ...userModel.toMap(),
-          'isActive': isDesignatedAdmin,
-          'approvalStatus': isDesignatedAdmin ? 'approved' : 'pending',
+          'isActive': isDesignatedAdmin || !isUnder18,
+          'isHidden': isUnder18,
+          'approvalStatus': isDesignatedAdmin ? 'approved' : (isUnder18 ? 'pending_guardian' : 'pending'),
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
@@ -561,6 +575,11 @@ class AuthService {
 
   /// Firebase Auth & Firestore Hata İşleme (Türkçe)
   Exception _handleAuthError(dynamic e) {
+    final errStr = e.toString();
+    if (errStr.contains('api.j: 10') || errStr.contains('10:') || (errStr.contains('sign_in_failed') && errStr.contains('10'))) {
+      return Exception('Google Sign-In SHA-1 sertifika uyuşmazlığı (Hata 10). Lütfen Google Play Console\'daki "App Signing SHA-1" parmak izini Firebase Console -> Proje Ayarları -> Android Uygulaması altına ekleyin.');
+    }
+
     if (e is FirebaseException) {
       if (e.code == 'permission-denied') {
         return Exception('Erişim engellendi: Bu işlemi gerçekleştirmek için yetkiniz bulunmuyor.');
@@ -602,6 +621,6 @@ class AuthService {
           return Exception('Bir hata oluştu: ${e.message ?? e.code}');
       }
     }
-    return Exception('Bir hata oluştu: ${e.toString().replaceAll("Exception: ", "")}');
+    return Exception('Bir hata oluştu: ${errStr.replaceAll("Exception: ", "")}');
   }
 }

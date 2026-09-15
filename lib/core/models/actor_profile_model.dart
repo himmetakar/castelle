@@ -76,6 +76,10 @@ class ActorProfileModel {
   final String? bankAccountHolder;
   final String? profilePhotoUrl;
   final String? recoveryEmail;
+  final bool? _isUnder18;
+  bool get isUnder18 => _isUnder18 ?? false;
+  final String? guardianName;
+  final String? guardianPhone;
 
   // Fiziksel özellikler
   final int? age;
@@ -164,6 +168,9 @@ class ActorProfileModel {
     this.bankAccountHolder,
     this.profilePhotoUrl,
     this.recoveryEmail,
+    bool? isUnder18 = false,
+    this.guardianName,
+    this.guardianPhone,
     this.age,
     this.birthYear,
     this.gender,
@@ -209,7 +216,7 @@ class ActorProfileModel {
     this.cvPdfUrl,
     this.cvText,
     this.projectVideos = const [],
-  });
+  }) : _isUnder18 = isUnder18;
 
   /// Firestore'dan oluştur
   factory ActorProfileModel.fromMap(Map<String, dynamic> map, String uid) {
@@ -321,6 +328,9 @@ class ActorProfileModel {
       bankAccountHolder: map['bankAccountHolder'],
       profilePhotoUrl: map['profilePhotoUrl'],
       recoveryEmail: map['recoveryEmail'],
+      isUnder18: map['isUnder18'] ?? false,
+      guardianName: map['guardianName'] as String?,
+      guardianPhone: map['guardianPhone'] as String?,
       age: map['age'],
       birthYear: map['birthYear'],
       gender: map['gender'] != null
@@ -386,6 +396,9 @@ class ActorProfileModel {
       'bankAccountHolder': bankAccountHolder,
       'profilePhotoUrl': profilePhotoUrl,
       'recoveryEmail': recoveryEmail,
+      'isUnder18': isUnder18,
+      'guardianName': guardianName,
+      'guardianPhone': guardianPhone,
       'age': age,
       'birthYear': birthYear,
       'gender': gender?.value,
@@ -470,6 +483,9 @@ class ActorProfileModel {
     String? bankAccountHolder,
     String? profilePhotoUrl,
     String? recoveryEmail,
+    bool? isUnder18,
+    String? guardianName,
+    String? guardianPhone,
     int? age,
     int? birthYear,
     Gender? gender,
@@ -526,6 +542,9 @@ class ActorProfileModel {
       bankAccountHolder: bankAccountHolder ?? this.bankAccountHolder,
       profilePhotoUrl: profilePhotoUrl ?? this.profilePhotoUrl,
       recoveryEmail: recoveryEmail ?? this.recoveryEmail,
+      isUnder18: isUnder18 ?? this.isUnder18,
+      guardianName: guardianName ?? this.guardianName,
+      guardianPhone: guardianPhone ?? this.guardianPhone,
       age: age ?? this.age,
       birthYear: birthYear ?? this.birthYear,
       gender: gender ?? this.gender,
