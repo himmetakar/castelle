@@ -268,7 +268,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         Padding(
                           padding: const EdgeInsets.only(left: 8.0),
                           child: Text(
-                            'Castelle platformuna Gmail veya e-posta adresiniz ile kaydolarak hemen katılın.',
+                            'Castelle platformuna Google veya e-posta adresiniz ile kaydolarak hemen katılın.',
                             style: GoogleFonts.inter(
                               fontSize: 13,
                               color: const Color(0xFF6B7280),
@@ -678,7 +678,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                             const _GoogleLogoSvg(size: 22),
                                             const SizedBox(width: 12),
                                             Text(
-                                              'Gmail ile Kayıt Ol',
+                                              'Google ile Kayıt Ol',
                                               style: GoogleFonts.outfit(
                                                 fontSize: 15.5,
                                                 fontWeight: FontWeight.w600,

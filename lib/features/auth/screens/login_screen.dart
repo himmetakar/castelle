@@ -264,7 +264,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             ).animate().fadeIn(delay: 150.ms).slideY(begin: 0.1),
                             const SizedBox(height: 8),
                             Text(
-                              'Premium Casting SaaS Platformu’na Gmail veya E-posta hesabınız ile giriş yapın.',
+                              'Premium Casting SaaS Platformu’na Google veya E-posta hesabınız ile giriş yapın.',
                               textAlign: TextAlign.center,
                               style: GoogleFonts.inter(
                                 fontSize: 13.5,
@@ -316,7 +316,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                                 const _GoogleLogoSvg(size: 22),
                                                 const SizedBox(width: 12),
                                                 Text(
-                                                  'Gmail ile Giriş Yap',
+                                                  'Google ile Giriş Yap',
                                                   style: GoogleFonts.outfit(
                                                     fontSize: 15.5,
                                                     fontWeight: FontWeight.w600,
