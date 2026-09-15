@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatf
 import 'package:castelle/core/providers/auth_provider.dart';
 import 'package:castelle/core/widgets/apple_sign_in_button.dart';
 import 'package:castelle/core/theme/app_theme.dart';
+import 'package:castelle/core/constants/app_constants.dart';
 import 'package:castelle/core/widgets/policy_dialogs.dart';
 
 /// Castelle - Register Screen
@@ -268,7 +269,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         Padding(
                           padding: const EdgeInsets.only(left: 8.0),
                           child: Text(
-                            'Castelle platformuna Google veya e-posta adresiniz ile kaydolarak hemen katılın.',
+                            'Castelle platformuna ${AppConstants.googleSignInEnabled ? 'Google veya ' : ''}e-posta adresiniz ile kaydolarak hemen katılın.',
                             style: GoogleFonts.inter(
                               fontSize: 13,
                               color: const Color(0xFF6B7280),
@@ -637,7 +638,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                         const SizedBox(height: 24),
 
-                        // --- GMAIL ILE KAYIT OL BUTONU ---
+                        // --- GOOGLE ILE KAYIT OL BUTONU ---
+                        if (AppConstants.googleSignInEnabled)
                         SizedBox(
                           width: double.infinity,
                           height: 52,
@@ -695,7 +697,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                         // --- APPLE ILE KAYIT (sadece iOS) ---
                         if (defaultTargetPlatform == TargetPlatform.iOS) ...[
-                          const SizedBox(height: 12),
+                          if (AppConstants.googleSignInEnabled) const SizedBox(height: 12),
                           AppleSignInButton(
                             label: 'Apple ile Kayıt Ol',
                             isLoading: _isAppleLoading,

@@ -9,6 +9,9 @@ class AppConstants {
   static const String appTagline = 'Premium Casting Platform';
   static const String appVersion = '1.0.0';
 
+  // Google girişi: castelle-9ab2c'de iOS OAuth client hazır olunca true yap
+  static const bool googleSignInEnabled = false;
+
   // Firestore Collections
   static const String usersCollection = 'users';
   static const String projectsCollection = 'projects';

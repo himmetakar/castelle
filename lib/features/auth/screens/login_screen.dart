@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatf
 import 'package:castelle/core/providers/auth_provider.dart';
 import 'package:castelle/core/widgets/apple_sign_in_button.dart';
 import 'package:castelle/core/theme/app_theme.dart';
+import 'package:castelle/core/constants/app_constants.dart';
 
 /// Castelle - Login Screen
 /// Gmail ve E-posta / Şifre ile Giriş Ekranı
@@ -264,7 +265,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             ).animate().fadeIn(delay: 150.ms).slideY(begin: 0.1),
                             const SizedBox(height: 8),
                             Text(
-                              'Premium Casting SaaS Platformu’na Google veya E-posta hesabınız ile giriş yapın.',
+                              'Premium Casting SaaS Platformu’na ${AppConstants.googleSignInEnabled ? 'Google veya ' : ''}E-posta hesabınız ile giriş yapın.',
                               textAlign: TextAlign.center,
                               style: GoogleFonts.inter(
                                 fontSize: 13.5,
@@ -275,7 +276,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
                             const SizedBox(height: 32),
 
-                            // --- GMAIL / GOOGLE ILE GIRIS BUTONU ---
+                            // --- GOOGLE ILE GIRIS BUTONU ---
+                            if (AppConstants.googleSignInEnabled)
                             SizedBox(
                               width: double.infinity,
                               height: 52,
@@ -333,7 +335,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                             // --- APPLE ILE GIRIS (sadece iOS) ---
                             if (defaultTargetPlatform == TargetPlatform.iOS) ...[
-                              const SizedBox(height: 12),
+                              if (AppConstants.googleSignInEnabled) const SizedBox(height: 12),
                               AppleSignInButton(
                                 label: 'Apple ile Giriş Yap',
                                 isLoading: _isAppleLoading,
