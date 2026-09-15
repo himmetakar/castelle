@@ -315,6 +315,10 @@ class AuthProvider extends ChangeNotifier {
       }
       final uid = firebaseUser.uid;
 
+      // 0. Apple ile giriş yapmışsa Apple token'ını iptal et (App Store 5.1.1(v)).
+      // Kullanıcı Apple onayını iptal ederse hesap silinmez.
+      await _authService.revokeAppleTokenIfNeeded();
+
       // 1. Önce kullanıcının kendi dokümanındaki tüm kişisel verileri temizle ve inaktif/pending yap
       try {
         await FirebaseFirestore.instance

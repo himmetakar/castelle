@@ -346,6 +346,24 @@ class AuthService {
     );
   }
 
+  /// Apple ile bağlı hesapta Apple token'ını iptal eder (hesap silmeden önce).
+  /// Yeni authorization code için Apple ile yeniden onay istenir.
+  Future<void> revokeAppleTokenIfNeeded() async {
+    final user = _auth.currentUser;
+    if (user == null || !user.providerData.any((p) => p.providerId == 'apple.com')) return;
+
+    try {
+      final credential = await user.reauthenticateWithProvider(AppleAuthProvider());
+      final code = credential.additionalUserInfo?.authorizationCode;
+      if (code != null) await _auth.revokeTokenWithAuthorizationCode(code);
+    } on FirebaseAuthException catch (e) {
+      if (e.code.contains('cancel') || (e.message ?? '').contains('1001')) {
+        throw Exception('Hesap silme iptal edildi.');
+      }
+      throw _handleAuthError(e);
+    }
+  }
+
   /// Sosyal giriş sonrası ortak akış: kullanıcı dokümanını bul/taşı/oluştur.
   /// [signIn] null dönerse kullanıcı iptal etmiştir.
   Future<UserModel?> _signInWithSocial({
