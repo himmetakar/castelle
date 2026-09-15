@@ -165,17 +165,34 @@ class AuthProvider extends ChangeNotifier {
     bool isUnder18 = false,
     String? guardianName,
     String? guardianPhone,
-  }) async {
+  }) {
+    return _signInWithSocial(() => _authService.signInWithGoogle(
+          isUnder18: isUnder18,
+          guardianName: guardianName,
+          guardianPhone: guardianPhone,
+        ));
+  }
+
+  /// Apple ile Giriş Yap / Kayıt Ol
+  Future<bool> signInWithApple({
+    bool isUnder18 = false,
+    String? guardianName,
+    String? guardianPhone,
+  }) {
+    return _signInWithSocial(() => _authService.signInWithApple(
+          isUnder18: isUnder18,
+          guardianName: guardianName,
+          guardianPhone: guardianPhone,
+        ));
+  }
+
+  Future<bool> _signInWithSocial(Future<UserModel?> Function() signIn) async {
     _status = AuthStatus.loading;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      final userModel = await _authService.signInWithGoogle(
-        isUnder18: isUnder18,
-        guardianName: guardianName,
-        guardianPhone: guardianPhone,
-      );
+      final userModel = await signIn();
       if (userModel == null) {
         // Giriş kullanıcı tarafından iptal edildi
         _status = AuthStatus.unauthenticated;

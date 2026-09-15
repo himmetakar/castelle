@@ -4,7 +4,9 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:castelle/core/providers/auth_provider.dart';
+import 'package:castelle/core/widgets/apple_sign_in_button.dart';
 import 'package:castelle/core/theme/app_theme.dart';
 import 'package:castelle/core/widgets/policy_dialogs.dart';
 
@@ -28,6 +30,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   bool? _isOver18; // true: 18 yaşından büyük, false: 18 yaşından küçük, null: seçilmedi
   bool _isGoogleLoading = false;
+  bool _isAppleLoading = false;
   bool _isEmailLoading = false;
   bool _showEmailForm = false;
   bool _obscurePassword = true;
@@ -136,6 +139,31 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
   }
 
+  Future<void> _handleAppleRegister() async {
+    if (!_validateAgeAndGuardian()) return;
+    if (!_validateLegalConsents()) return;
+
+    setState(() => _isAppleLoading = true);
+    final authProvider = context.read<AuthProvider>();
+    final success = await authProvider.signInWithApple(
+      isUnder18: _isOver18 == false,
+      guardianName: _isOver18 == false ? _guardianNameController.text.trim() : null,
+      guardianPhone: _isOver18 == false ? _guardianPhoneController.text.trim() : null,
+    );
+    if (mounted) setState(() => _isAppleLoading = false);
+
+    if (!success && mounted && authProvider.errorMessage != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(authProvider.errorMessage!),
+          backgroundColor: AppTheme.error,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+    }
+  }
+
   Future<void> _handleEmailRegister() async {
     if (!_validateAgeAndGuardian()) return;
     if (!_validateLegalConsents()) return;
@@ -170,7 +198,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
-    final isLoading = authProvider.isLoading || _isGoogleLoading || _isEmailLoading;
+    final isLoading = authProvider.isLoading || _isGoogleLoading || _isAppleLoading || _isEmailLoading;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF3F4F6),
@@ -664,6 +692,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             ),
                           ),
                         ).animate().fadeIn(delay: 450.ms),
+
+                        // --- APPLE ILE KAYIT (sadece iOS) ---
+                        if (defaultTargetPlatform == TargetPlatform.iOS) ...[
+                          const SizedBox(height: 12),
+                          AppleSignInButton(
+                            label: 'Apple ile Kayıt Ol',
+                            isLoading: _isAppleLoading,
+                            onTap: isLoading ? null : _handleAppleRegister,
+                          ).animate().fadeIn(delay: 500.ms),
+                        ],
 
                         const SizedBox(height: 20),
 

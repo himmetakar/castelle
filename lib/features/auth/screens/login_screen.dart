@@ -4,7 +4,9 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:castelle/core/providers/auth_provider.dart';
+import 'package:castelle/core/widgets/apple_sign_in_button.dart';
 import 'package:castelle/core/theme/app_theme.dart';
 
 /// Castelle - Login Screen
@@ -23,6 +25,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
 
   bool _isGoogleLoading = false;
+  bool _isAppleLoading = false;
   bool _isEmailLoading = false;
   bool _showEmailForm = false;
   bool _obscurePassword = true;
@@ -39,6 +42,24 @@ class _LoginScreenState extends State<LoginScreen> {
     final authProvider = context.read<AuthProvider>();
     final success = await authProvider.signInWithGoogle();
     if (mounted) setState(() => _isGoogleLoading = false);
+
+    if (!success && mounted && authProvider.errorMessage != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(authProvider.errorMessage!),
+          backgroundColor: AppTheme.error,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+    }
+  }
+
+  Future<void> _handleAppleSignIn() async {
+    setState(() => _isAppleLoading = true);
+    final authProvider = context.read<AuthProvider>();
+    final success = await authProvider.signInWithApple();
+    if (mounted) setState(() => _isAppleLoading = false);
 
     if (!success && mounted && authProvider.errorMessage != null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -149,7 +170,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
-    final isLoading = authProvider.isLoading || _isGoogleLoading || _isEmailLoading;
+    final isLoading = authProvider.isLoading || _isGoogleLoading || _isAppleLoading || _isEmailLoading;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF3F4F6),
@@ -309,6 +330,16 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                               ),
                             ).animate().fadeIn(delay: 350.ms).scale(begin: const Offset(0.96, 0.96)),
+
+                            // --- APPLE ILE GIRIS (sadece iOS) ---
+                            if (defaultTargetPlatform == TargetPlatform.iOS) ...[
+                              const SizedBox(height: 12),
+                              AppleSignInButton(
+                                label: 'Apple ile Giriş Yap',
+                                isLoading: _isAppleLoading,
+                                onTap: isLoading ? null : _handleAppleSignIn,
+                              ).animate().fadeIn(delay: 400.ms),
+                            ],
 
                             const SizedBox(height: 20),
 

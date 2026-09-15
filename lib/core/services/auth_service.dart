@@ -301,36 +301,73 @@ class AuthService {
     bool isUnder18 = false,
     String? guardianName,
     String? guardianPhone,
+  }) {
+    return _signInWithSocial(
+      label: 'Google',
+      isUnder18: isUnder18,
+      guardianName: guardianName,
+      guardianPhone: guardianPhone,
+      signIn: () async {
+        final GoogleSignIn googleSignIn = GoogleSignIn(
+          serverClientId: '977939722051-78bh3stbhgh85rsub18ra2c0566l1gq7.apps.googleusercontent.com',
+        );
+        try {
+          await googleSignIn.signOut();
+        } catch (_) {}
+
+        final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
+        if (googleUser == null) return null;
+
+        final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+        return _auth.signInWithCredential(GoogleAuthProvider.credential(
+          accessToken: googleAuth.accessToken,
+          idToken: googleAuth.idToken,
+        ));
+      },
+    );
+  }
+
+  /// Apple ile Giriş Yap / Kayıt Ol (iOS native akış)
+  Future<UserModel?> signInWithApple({
+    bool isUnder18 = false,
+    String? guardianName,
+    String? guardianPhone,
+  }) {
+    return _signInWithSocial(
+      label: 'Apple',
+      isUnder18: isUnder18,
+      guardianName: guardianName,
+      guardianPhone: guardianPhone,
+      signIn: () => _auth.signInWithProvider(
+        AppleAuthProvider()
+          ..addScope('email')
+          ..addScope('name'),
+      ),
+    );
+  }
+
+  /// Sosyal giriş sonrası ortak akış: kullanıcı dokümanını bul/taşı/oluştur.
+  /// [signIn] null dönerse kullanıcı iptal etmiştir.
+  Future<UserModel?> _signInWithSocial({
+    required String label,
+    required Future<UserCredential?> Function() signIn,
+    bool isUnder18 = false,
+    String? guardianName,
+    String? guardianPhone,
   }) async {
+    final placeholderName = '$label Kullanıcısı';
     try {
-      final GoogleSignIn googleSignIn = GoogleSignIn(
-        serverClientId: '977939722051-78bh3stbhgh85rsub18ra2c0566l1gq7.apps.googleusercontent.com',
-      );
-      try {
-        await googleSignIn.signOut();
-      } catch (_) {}
-
-      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
-      if (googleUser == null) {
-        return null;
-      }
-
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-      final OAuthCredential credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
-
-      final UserCredential userCredential = await _auth.signInWithCredential(credential);
+      final UserCredential? userCredential = await signIn();
+      if (userCredential == null) return null;
       final user = userCredential.user;
       if (user == null) {
-        throw Exception('Google ile giriş gerçekleştirilemedi.');
+        throw Exception('$label ile giriş gerçekleştirilemedi.');
       }
 
       final uid = user.uid;
-      final email = user.email ?? googleUser.email;
-      final fullName = user.displayName ?? googleUser.displayName ?? 'Google Kullanıcısı';
-      final photoUrl = user.photoURL ?? googleUser.photoUrl;
+      final email = user.email ?? '';
+      final fullName = user.displayName ?? placeholderName;
+      final photoUrl = user.photoURL;
 
       // Özel Admin listesinde bu e-posta adresi var mı?
       final designatedAdmin = designatedAdmins.firstWhere(
@@ -365,9 +402,9 @@ class AuthService {
           'updatedAt': FieldValue.serverTimestamp(),
         };
 
-        if ((data['fullName'] as String? ?? '').isEmpty || data['fullName'] == 'Google Kullanıcısı') {
+        if ((data['fullName'] as String? ?? '').isEmpty || data['fullName'] == placeholderName) {
           updateData['fullName'] = isDesignatedAdmin
-              ? (fullName.isNotEmpty && fullName != 'Google Kullanıcısı' ? fullName : designatedAdmin['name']!)
+              ? (fullName.isNotEmpty && fullName != placeholderName ? fullName : designatedAdmin['name']!)
               : fullName;
         }
 
@@ -402,7 +439,7 @@ class AuthService {
       } else {
         // Yeni kullanıcı dokümanı oluştur
         final assignedRole = isDesignatedAdmin ? UserRole.admin : UserRole.actor;
-        final assignedName = fullName.isNotEmpty && fullName != 'Google Kullanıcısı'
+        final assignedName = fullName.isNotEmpty && fullName != placeholderName
             ? fullName
             : (isDesignatedAdmin ? designatedAdmin['name']! : fullName);
 
@@ -436,13 +473,15 @@ class AuthService {
         return userModel;
       }
     } on FirebaseAuthException catch (e) {
+      // Apple sayfası kapatıldı (ASAuthorizationError 1001)
+      if (e.code.contains('cancel') || (e.message ?? '').contains('1001')) return null;
       throw _handleAuthError(e);
     } catch (e) {
       final errStr = e.toString();
       if (errStr.contains('sign_in_canceled') || errStr.contains('canceled')) {
         return null;
       }
-      throw Exception('Google ile giriş gerçekleştirilemedi: $e');
+      throw Exception('$label ile giriş gerçekleştirilemedi: $e');
     }
   }
 
