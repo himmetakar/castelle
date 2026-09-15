@@ -1,26 +1,175 @@
 {
   "project_info": {
-    "project_number": "58376999425",
-    "project_id": "castelle-9ab2c",
-    "storage_bucket": "castelle-9ab2c.firebasestorage.app"
+    "project_number": "977939722051",
+    "project_id": "castelle-ce64b",
+    "storage_bucket": "castelle-ce64b.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:58376999425:android:4d164708a5e06fd594a600",
+        "mobilesdk_app_id": "1:977939722051:android:26e1b5da9273acfc8a49f6",
         "android_client_info": {
-          "package_name": "com.castelle.castelle"
+          "package_name": "com.castelleapp.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "977939722051-470n6k2qg9rik061if4s3m409gfsk3gk.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.castelleapp.app",
+            "certificate_hash": "c8cc23f8f6bdab115043e42541c9e2e756c4e2cc"
+          }
+        },
+        {
+          "client_id": "977939722051-565lj66pbn749gu7b5tqksn44qa2ljkb.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.castelleapp.app",
+            "certificate_hash": "3a6fbfdb851a1e74be6e358b90846a0958284912"
+          }
+        },
+        {
+          "client_id": "977939722051-65n2g3l2ncnq7d2cuf86e486emhj66s8.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.castelleapp.app",
+            "certificate_hash": "499bcd351a37825bda553128cf1d85106989785a"
+          }
+        },
+        {
+          "client_id": "977939722051-7o9avjil9v41j92rtunefd4lhb186eif.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.castelleapp.app",
+            "certificate_hash": "ee8dbaf4fccb9e78bfe936289320f75cc97cbc43"
+          }
+        },
+        {
+          "client_id": "977939722051-8dke8kkum91grfjrkjvaust31g58ffgt.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.castelleapp.app",
+            "certificate_hash": "81af3657999ce68da342b6c03d15660309c4a442"
+          }
+        },
+        {
+          "client_id": "977939722051-suhb3l34hqchl4e381sl7p6gkcfmpp56.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.castelleapp.app",
+            "certificate_hash": "e905a98167819251e4cbbd0844914bbe65c06df9"
+          }
+        },
+        {
+          "client_id": "977939722051-78bh3stbhgh85rsub18ra2c0566l1gq7.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
-          "current_key": "AIzaSyD-xf-3xJWBwbDErNHkzI51m5nXNvlmrmM"
+          "current_key": "AIzaSyCWojyTDMo7dMFF5xQrQOkRfNSjcbooIMg"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "977939722051-78bh3stbhgh85rsub18ra2c0566l1gq7.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "977939722051-vskf7va7k1ncaj3s057fdl9l08rff8b4.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.castelleapp.app"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:977939722051:android:0933e402731f08098a49f6",
+        "android_client_info": {
+          "package_name": "com.castelleapp.castle48"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "977939722051-1k6kc6lih0f8o4b0cuh0ufbgrb3m81ec.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.castelleapp.castle48",
+            "certificate_hash": "499bcd351a37825bda553128cf1d85106989785a"
+          }
+        },
+        {
+          "client_id": "977939722051-9s9petdnc4sj1ls1j9oo1jbmdf4ncq3g.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.castelleapp.castle48",
+            "certificate_hash": "c8cc23f8f6bdab115043e42541c9e2e756c4e2cc"
+          }
+        },
+        {
+          "client_id": "977939722051-dddl29mdj6qo2atafvhrts737qn8encf.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.castelleapp.castle48",
+            "certificate_hash": "3a6fbfdb851a1e74be6e358b90846a0958284912"
+          }
+        },
+        {
+          "client_id": "977939722051-jmaa4hlb3a0dbf2b1qcrijgf53vheag0.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.castelleapp.castle48",
+            "certificate_hash": "81af3657999ce68da342b6c03d15660309c4a442"
+          }
+        },
+        {
+          "client_id": "977939722051-jvdfl581pe2iubau10duih0a3jgmu25g.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.castelleapp.castle48",
+            "certificate_hash": "ee8dbaf4fccb9e78bfe936289320f75cc97cbc43"
+          }
+        },
+        {
+          "client_id": "977939722051-rd55nghp01prkbkk66ln8kjd1a0a53nt.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.castelleapp.castle48",
+            "certificate_hash": "e905a98167819251e4cbbd0844914bbe65c06df9"
+          }
+        },
+        {
+          "client_id": "977939722051-78bh3stbhgh85rsub18ra2c0566l1gq7.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCWojyTDMo7dMFF5xQrQOkRfNSjcbooIMg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "977939722051-78bh3stbhgh85rsub18ra2c0566l1gq7.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "977939722051-vskf7va7k1ncaj3s057fdl9l08rff8b4.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.castelleapp.app"
+              }
+            }
+          ]
         }
       }
     }

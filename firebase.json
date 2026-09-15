@@ -15,8 +15,8 @@
     "platforms": {
       "android": {
         "default": {
-          "projectId": "castelle-9ab2c",
-          "appId": "1:58376999425:android:4d164708a5e06fd594a600",
+          "projectId": "castelle-ce64b",
+          "appId": "1:977939722051:android:26e1b5da9273acfc8a49f6",
           "fileOutput": "android/app/google-services.json"
         }
       },
@@ -24,7 +24,7 @@
         "lib/firebase_options.dart": {
           "projectId": "castelle-9ab2c",
           "configurations": {
-            "android": "1:58376999425:android:4d164708a5e06fd594a600",
+            "android": "1:977939722051:android:26e1b5da9273acfc8a49f6",
             "ios": "1:58376999425:ios:a1ec80cead80d17a94a600"
           }
         }
