@@ -28,11 +28,12 @@ class DefaultFirebaseOptions {
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyBgTqxtxY9Wiyhm3VFow1siYKSITVcSiXc',
-    appId: '1:58376999425:ios:a1ec80cead80d17a94a600',
-    messagingSenderId: '58376999425',
-    projectId: 'castelle-9ab2c',
-    storageBucket: 'castelle-9ab2c.firebasestorage.app',
+    apiKey: 'AIzaSyDkiCwK6XeiyosXYuYfS33QoBgpioFgCWs',
+    appId: '1:977939722051:ios:04a606d3853a563c8a49f6',
+    messagingSenderId: '977939722051',
+    projectId: 'castelle-ce64b',
+    storageBucket: 'castelle-ce64b.firebasestorage.app',
+    iosClientId: '977939722051-afplrdp46i8cvaabhgkareram8i4nmu4.apps.googleusercontent.com',
     iosBundleId: 'com.castelle.odiapp',
   );
 

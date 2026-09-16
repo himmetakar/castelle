@@ -22,10 +22,10 @@
       },
       "dart": {
         "lib/firebase_options.dart": {
-          "projectId": "castelle-9ab2c",
+          "projectId": "castelle-ce64b",
           "configurations": {
             "android": "1:977939722051:android:26e1b5da9273acfc8a49f6",
-            "ios": "1:58376999425:ios:a1ec80cead80d17a94a600"
+            "ios": "1:977939722051:ios:04a606d3853a563c8a49f6"
           }
         }
       }
