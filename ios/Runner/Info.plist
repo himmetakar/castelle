@@ -39,6 +39,12 @@
 	<string>977939722051-afplrdp46i8cvaabhgkareram8i4nmu4.apps.googleusercontent.com</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Audition videonuzu çekmek ve profil fotoğrafı eklemek için kameraya erişim gerekiyor.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Audition videonuzun sesini kaydetmek için mikrofona erişim gerekiyor.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Profil fotoğrafı, galeri görselleri ve audition videosu seçmek için fotoğraflarınıza erişim gerekiyor.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
