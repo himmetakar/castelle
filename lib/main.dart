@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
@@ -14,6 +15,7 @@ import 'package:castelle/features/employer/providers/project_provider.dart';
 import 'package:castelle/core/providers/notification_provider.dart';
 import 'package:castelle/features/actor/providers/audition_provider.dart';
 import 'package:castelle/core/services/audition_cleanup_service.dart';
+import 'package:castelle/core/services/push_notification_service.dart';
 import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
 import 'firebase_options.dart';
 
@@ -63,6 +65,11 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  // Push bildirimleri: arka plan/kapalı durum mesaj işleyicisi (top-level fonksiyon olmalı)
+  // ve yerel bildirim kanalı — telefona WhatsApp benzeri sesli/banner bildirim düşmesi için.
+  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+  await PushNotificationService().initLocalNotifications();
 
   // Sadece giriş yapmış kullanıcı varsa arka plan temizleme işlemlerini çalıştır
   if (FirebaseAuth.instance.currentUser != null) {

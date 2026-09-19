@@ -9,6 +9,7 @@ import 'package:castelle/core/models/notification_model.dart';
 import 'package:castelle/core/models/project_model.dart';
 import 'package:castelle/core/models/audition_model.dart';
 import 'package:castelle/core/services/project_service.dart';
+import 'package:castelle/core/services/push_notification_service.dart';
 import 'package:castelle/features/actor/providers/audition_provider.dart';
 
 /// Castelle - Premium App Shell
@@ -37,11 +38,18 @@ class _AppShellState extends State<AppShell> {
     super.initState();
     // Bildirim dinlemeyi başlat
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final user = context.read<AuthProvider>().user;
+      final authProvider = context.read<AuthProvider>();
+      final user = authProvider.user;
       final uid = user?.uid;
       final role = user?.role.value;
       if (uid != null) {
         context.read<NotificationProvider>().startListening(uid, role: role);
+
+        // Push bildirim izni iste, FCM token'ı al ve kaydet, ön planda gelen
+        // mesajları sesli/banner sistem bildirimi olarak göster.
+        PushNotificationService().initForUser(
+          onToken: (token) => authProvider.updateFcmToken(token),
+        );
       }
       _loadActiveProjects();
     });

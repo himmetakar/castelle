@@ -1,4 +1,5 @@
 import 'dart:ui' as ui;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -35,7 +36,10 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
       duration: const Duration(seconds: 60),
     )..repeat();
 
-    _loadShader();
+    // Web'de açılış animasyonu (shader + logo) gösterilmiyor
+    if (!kIsWeb) {
+      _loadShader();
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeApp();
     });
@@ -70,8 +74,11 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     final authProvider = context.read<AuthProvider>();
     final checkAuthFuture = authProvider.checkAuthStatus();
 
-    // 2. Tam olarak 2 saniye bekle
-    await Future.delayed(const Duration(seconds: 2));
+    // 2. Web'de bekletme animasyonu olmadığı için ekstra gecikme yok,
+    //    mobilde 2 saniyelik açılış animasyonu süresi kadar bekle
+    if (!kIsWeb) {
+      await Future.delayed(const Duration(seconds: 2));
+    }
 
     // 3. Giriş durumunun tamamlanmasını bekle
     await checkAuthFuture;
@@ -96,6 +103,15 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
   @override
   Widget build(BuildContext context) {
+    // Web'de açılış animasyonu (shader + logo) gösterilmez, düz beyaz ekran ile
+    // yönlendirme gerçekleşene kadar bekletilir.
+    if (kIsWeb) {
+      return const Scaffold(
+        backgroundColor: Colors.white,
+        body: SizedBox.shrink(),
+      );
+    }
+
     final double devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
 
     return Scaffold(

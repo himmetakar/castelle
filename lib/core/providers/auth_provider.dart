@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:castelle/core/models/user_model.dart';
 import 'package:castelle/core/services/auth_service.dart';
+import 'package:castelle/core/services/push_notification_service.dart';
 import 'package:castelle/core/constants/user_roles.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:castelle/core/constants/app_constants.dart';
@@ -26,6 +27,7 @@ class AuthProvider extends ChangeNotifier {
   AuthStatus _status = AuthStatus.initial;
   UserModel? _user;
   String? _errorMessage;
+  GoogleAgeVerificationRequired? _pendingGoogleUser;
 
   // Getters
   AuthStatus get status => _status;
@@ -34,6 +36,19 @@ class AuthProvider extends ChangeNotifier {
   bool get isAuthenticated => _status == AuthStatus.authenticated;
   bool get isLoading => _status == AuthStatus.loading;
   UserRole? get userRole => _user?.role;
+
+  /// Google ile ilk kez giriş yapan ve yaş doğrulaması bekleyen kullanıcı bilgisi.
+  /// Bu null değilse, UI katmanı yaş/veli bilgisi dialog'unu göstermelidir.
+  GoogleAgeVerificationRequired? get pendingGoogleUser => _pendingGoogleUser;
+
+  /// Oturum açık olan Firebase Auth kullanıcısının e-postası doğrulanmış mı?
+  /// [UserModel.emailVerificationRequired] false ise (örn. Google ile giriş)
+  /// bu değer önem taşımaz.
+  bool get isEmailVerified => _authService.isEmailVerified;
+
+  /// Uygulama içeriğine erişmeden önce e-posta aktivasyonu bekleniyor mu?
+  bool get needsEmailVerification =>
+      isAuthenticated && (_user?.emailVerificationRequired ?? false) && !isEmailVerified;
 
   // Rol bazlı kontroller
   bool get isAdmin => _user?.role == UserRole.admin;
@@ -68,6 +83,16 @@ class AuthProvider extends ChangeNotifier {
         }
         _status = AuthStatus.authenticated;
         _errorMessage = null;
+
+        // Aktivasyon bekleyen bir hesapsa, emailVerified durumunu sunucudan
+        // tazele (kullanıcı linke başka bir cihazda/oturumda tıklamış olabilir;
+        // Firebase Auth bu bilgiyi yerelde önbelleğe alır ve reload() olmadan
+        // güncellenmez).
+        if (_user?.emailVerificationRequired == true) {
+          try {
+            await _authService.reloadCurrentUserAndCheckVerified();
+          } catch (_) {}
+        }
 
         // Admin hesapları (Yağmur ve Alican) rol kontrolü ve ikilik senkronizasyonu
         // Sadece authenticated durumda çalıştır (Firestore güvenlik kuralları gerektirir)
@@ -164,9 +189,11 @@ class AuthProvider extends ChangeNotifier {
     bool isUnder18 = false,
     String? guardianName,
     String? guardianPhone,
+    bool ageVerified = false,
   }) async {
     _status = AuthStatus.loading;
     _errorMessage = null;
+    _pendingGoogleUser = null;
     notifyListeners();
 
     try {
@@ -174,6 +201,7 @@ class AuthProvider extends ChangeNotifier {
         isUnder18: isUnder18,
         guardianName: guardianName,
         guardianPhone: guardianPhone,
+        ageVerified: ageVerified,
       );
       if (userModel == null) {
         // Giriş kullanıcı tarafından iptal edildi
@@ -191,12 +219,65 @@ class AuthProvider extends ChangeNotifier {
 
       notifyListeners();
       return true;
+    } on GoogleAgeVerificationRequired catch (e) {
+      // Firebase Auth oturumu açıldı ama Firestore kaydı henüz yok —
+      // UI, yaş/veli bilgisini toplayıp completeGoogleRegistration'ı çağırmalı.
+      _pendingGoogleUser = e;
+      _status = AuthStatus.unauthenticated;
+      _errorMessage = null;
+      notifyListeners();
+      return false;
     } catch (e) {
       _status = AuthStatus.error;
       _errorMessage = e.toString().replaceAll('Exception: ', '');
       notifyListeners();
       return false;
     }
+  }
+
+  /// [pendingGoogleUser] doldurulduktan sonra, yaş/veli bilgisi toplanıp
+  /// Google kaydını tamamlamak için çağrılır.
+  Future<bool> completeGoogleRegistration({
+    required bool isUnder18,
+    String? guardianName,
+    String? guardianPhone,
+  }) async {
+    _status = AuthStatus.loading;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      _user = await _authService.completeGoogleRegistration(
+        isUnder18: isUnder18,
+        guardianName: guardianName,
+        guardianPhone: guardianPhone,
+      );
+      _status = AuthStatus.authenticated;
+      _pendingGoogleUser = null;
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('is_logged_in', true);
+
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _status = AuthStatus.error;
+      _errorMessage = e.toString().replaceAll('Exception: ', '');
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Kullanıcı yaş doğrulama dialog'unu iptal ederse, yarım kalan Google
+  /// oturumunu güvenli şekilde kapatır.
+  Future<void> cancelPendingGoogleRegistration() async {
+    _pendingGoogleUser = null;
+    try {
+      await _authService.signOut();
+    } catch (_) {}
+    _status = AuthStatus.unauthenticated;
+    _errorMessage = null;
+    notifyListeners();
   }
 
   /// E-posta ve Profil Detaylarını Kaydet / Güncelle
@@ -242,12 +323,13 @@ class AuthProvider extends ChangeNotifier {
     _user = null;
     _status = AuthStatus.unauthenticated;
     _errorMessage = null;
-    
+    PushNotificationService().reset();
+
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('is_logged_in', false);
     } catch (_) {}
-    
+
     notifyListeners();
   }
 
@@ -263,6 +345,29 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+  }
+
+  /// Aktivasyon e-postasını yeniden gönder
+  Future<bool> resendVerificationEmail() async {
+    try {
+      await _authService.resendVerificationEmail();
+      _errorMessage = null;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString().replaceAll('Exception: ', '');
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Kullanıcı aktivasyon linkine tıkladıktan sonra doğrulama durumunu yeniden kontrol et
+  Future<bool> refreshEmailVerification() async {
+    final verified = await _authService.reloadCurrentUserAndCheckVerified();
+    if (verified) {
+      notifyListeners();
+    }
+    return verified;
   }
 
   /// FCM Token güncelle

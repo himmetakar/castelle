@@ -566,27 +566,27 @@ class _AuditionReviewScreenState extends State<AuditionReviewScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.surface,
-      appBar: AppBar(
-        title: const Text('Audition İncele'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.download_rounded),
-            tooltip: 'Cihaza İndir (PDF + Video)',
-            onPressed: () => _downloadSingleAudition(),
-          ),
-          if (context.read<AuthProvider>().user?.hasModeratorPermission('auditionCevaplama') ?? true)
-            IconButton(
-              icon: const Icon(Icons.chat_bubble_outline_rounded),
-              tooltip: 'Oyuncuya Mesaj/Bildirim Gönder',
-              onPressed: () => _showMessageDialog(),
-            ),
-          if (context.read<AuthProvider>().user?.hasModeratorPermission('auditionSilme') ?? true)
-            IconButton(
-              icon: const Icon(Icons.delete_outline_rounded, color: AppTheme.error),
-              tooltip: 'Audition\'ı Sil',
-              onPressed: () => _confirmDeleteAudition(),
-            ),
-        ],
+      appBar: AppBar(
+        title: const Text('Audition İncele'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.download_rounded),
+            tooltip: 'Cihaza İndir (PDF + Video)',
+            onPressed: () => _downloadSingleAudition(),
+          ),
+          if (context.read<AuthProvider>().user?.hasModeratorPermission('auditionCevaplama') ?? true)
+            IconButton(
+              icon: const Icon(Icons.chat_bubble_outline_rounded),
+              tooltip: 'Oyuncuya Mesaj/Bildirim Gönder',
+              onPressed: () => _showMessageDialog(),
+            ),
+          if (context.read<AuthProvider>().user?.hasModeratorPermission('auditionSilme') ?? true)
+            IconButton(
+              icon: const Icon(Icons.delete_outline_rounded, color: AppTheme.error),
+              tooltip: 'Audition\'ı Sil',
+              onPressed: () => _confirmDeleteAudition(),
+            ),
+        ],
       ),
       body: SingleChildScrollView(
         child: Column(
@@ -691,21 +691,39 @@ class _AuditionReviewScreenState extends State<AuditionReviewScreen> {
     );
   }
 
+  /// Video oynatıcı alanını, geniş web/masaüstü ekranlarında (özellikle
+  /// dikey/portre çekilmiş videolarda) tüm ekranı kaplayacak şekilde
+  /// devasa büyümesini engellemek için makul bir maksimum yükseklikle
+  /// sarmalar. Mobil uygulamada zaten dar olan ekran genişliği bu sınıra
+  /// nadiren takılır; web'de ise videoyu ortalanmış, makul boyutlu bir
+  /// kutuda gösterir. Tam ekran izlemek isteyen kullanıcı Chewie'nin
+  /// kendi tam ekran butonunu kullanabilir (allowFullScreen: true).
+  Widget _buildVideoPlayerBounded(Widget child) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxHeight: 520),
+        child: child,
+      ),
+    );
+  }
+
   Widget _buildVideoPlayer() {
     if (_isVideoLoading) {
-      return AspectRatio(
-        aspectRatio: 16 / 9,
-        child: Container(
-          color: AppTheme.surfaceLight,
-          child: const Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                CircularProgressIndicator(color: AppTheme.accent),
-                SizedBox(height: 12),
-                Text('Video yükleniyor...',
-                    style: TextStyle(color: AppTheme.textTertiary)),
-              ],
+      return _buildVideoPlayerBounded(
+        AspectRatio(
+          aspectRatio: 16 / 9,
+          child: Container(
+            color: AppTheme.surfaceLight,
+            child: const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(color: AppTheme.accent),
+                  SizedBox(height: 12),
+                  Text('Video yükleniyor...',
+                      style: TextStyle(color: AppTheme.textTertiary)),
+                ],
+              ),
             ),
           ),
         ),
@@ -787,9 +805,11 @@ class _AuditionReviewScreenState extends State<AuditionReviewScreen> {
       );
     }
 
-    return AspectRatio(
-      aspectRatio: _videoController!.value.aspectRatio,
-      child: Chewie(controller: _chewieController!),
+    return _buildVideoPlayerBounded(
+      AspectRatio(
+        aspectRatio: _videoController!.value.aspectRatio,
+        child: Chewie(controller: _chewieController!),
+      ),
     );
   }
 

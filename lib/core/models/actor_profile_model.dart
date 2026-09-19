@@ -80,6 +80,7 @@ class ActorProfileModel {
   bool get isUnder18 => _isUnder18 ?? false;
   final String? guardianName;
   final String? guardianPhone;
+  final bool ageConfirmed; // 18 yaş sorusu gerçekten cevaplandı mı?
 
   // Fiziksel özellikler
   final int? age;
@@ -171,6 +172,7 @@ class ActorProfileModel {
     bool? isUnder18 = false,
     this.guardianName,
     this.guardianPhone,
+    this.ageConfirmed = true,
     this.age,
     this.birthYear,
     this.gender,
@@ -331,6 +333,7 @@ class ActorProfileModel {
       isUnder18: map['isUnder18'] ?? false,
       guardianName: map['guardianName'] as String?,
       guardianPhone: map['guardianPhone'] as String?,
+      ageConfirmed: map['ageConfirmed'] ?? true,
       age: map['age'],
       birthYear: map['birthYear'],
       gender: map['gender'] != null
@@ -399,6 +402,7 @@ class ActorProfileModel {
       'isUnder18': isUnder18,
       'guardianName': guardianName,
       'guardianPhone': guardianPhone,
+      'ageConfirmed': ageConfirmed,
       'age': age,
       'birthYear': birthYear,
       'gender': gender?.value,
@@ -486,6 +490,7 @@ class ActorProfileModel {
     bool? isUnder18,
     String? guardianName,
     String? guardianPhone,
+    bool? ageConfirmed,
     int? age,
     int? birthYear,
     Gender? gender,
@@ -545,6 +550,7 @@ class ActorProfileModel {
       isUnder18: isUnder18 ?? this.isUnder18,
       guardianName: guardianName ?? this.guardianName,
       guardianPhone: guardianPhone ?? this.guardianPhone,
+      ageConfirmed: ageConfirmed ?? this.ageConfirmed,
       age: age ?? this.age,
       birthYear: birthYear ?? this.birthYear,
       gender: gender ?? this.gender,

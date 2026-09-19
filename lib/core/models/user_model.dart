@@ -26,6 +26,9 @@ class UserModel {
   final String guardianApprovalStatus; // 'pending', 'approved', 'rejected'
   final bool hasAcceptedTerms; // Sözleşmeler ve KVKK onaylandı mı?
   final DateTime? acceptedTermsAt; // Onaylanma tarihi
+  final bool emailVerificationRequired; // Normal e-posta kaydı → aktivasyon e-postası zorunlu mu?
+  final String? fcmToken; // Push bildirim token'ı
+  final bool ageConfirmed; // 18 yaş sorusu gerçekten cevaplandı mı? (Google ile kayıtta zorunlu doğrulama için)
 
   const UserModel({
     required this.uid,
@@ -49,6 +52,9 @@ class UserModel {
     this.guardianApprovalStatus = 'pending',
     this.hasAcceptedTerms = false,
     this.acceptedTermsAt,
+    this.emailVerificationRequired = false,
+    this.fcmToken,
+    this.ageConfirmed = true,
   });
 
   /// Firestore'dan UserModel oluştur
@@ -91,6 +97,12 @@ class UserModel {
       guardianApprovalStatus: map['guardianApprovalStatus'] ?? (under18Flag ? 'pending' : 'approved'),
       hasAcceptedTerms: map['hasAcceptedTerms'] ?? false,
       acceptedTermsAt: parseDate(map['acceptedTermsAt']),
+      emailVerificationRequired: map['emailVerificationRequired'] ?? false,
+      fcmToken: map['fcmToken'],
+      // Alan Firestore'da yoksa (eski/mevcut hesaplar) geriye dönük uyumluluk
+      // için doğrulanmış kabul edilir — sadece yeni Google kayıtlarında
+      // bilinçli olarak false yazılır.
+      ageConfirmed: map['ageConfirmed'] ?? true,
     );
   }
 
@@ -117,6 +129,9 @@ class UserModel {
       'guardianApprovalStatus': guardianApprovalStatus,
       'hasAcceptedTerms': hasAcceptedTerms,
       'acceptedTermsAt': acceptedTermsAt?.toIso8601String(),
+      'emailVerificationRequired': emailVerificationRequired,
+      'fcmToken': fcmToken,
+      'ageConfirmed': ageConfirmed,
     };
   }
 
@@ -140,6 +155,9 @@ class UserModel {
     String? guardianApprovalStatus,
     bool? hasAcceptedTerms,
     DateTime? acceptedTermsAt,
+    bool? emailVerificationRequired,
+    String? fcmToken,
+    bool? ageConfirmed,
   }) {
     return UserModel(
       uid: uid,
@@ -163,6 +181,9 @@ class UserModel {
       guardianApprovalStatus: guardianApprovalStatus ?? this.guardianApprovalStatus,
       hasAcceptedTerms: hasAcceptedTerms ?? this.hasAcceptedTerms,
       acceptedTermsAt: acceptedTermsAt ?? this.acceptedTermsAt,
+      emailVerificationRequired: emailVerificationRequired ?? this.emailVerificationRequired,
+      fcmToken: fcmToken ?? this.fcmToken,
+      ageConfirmed: ageConfirmed ?? this.ageConfirmed,
     );
   }
 

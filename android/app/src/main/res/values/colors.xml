@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Push bildirim ikonunun arka plan rengi (AppTheme.accent ile eşleşir) -->
+    <color name="notification_accent">#1E6B1E</color>
+</resources>

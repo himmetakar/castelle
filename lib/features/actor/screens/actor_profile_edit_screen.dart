@@ -78,6 +78,12 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
   String? _processingVideoKey; // Şu an sıkıştırılan/yüklenen video anahtarı
   bool _forceClose = false;
 
+  /// 18 yaş doğrulama seçimi: null = henüz seçim yapılmadı (zorunlu alan),
+  /// false = "18 yaşından büyüğüm", true = "18 yaşından küçüğüm".
+  /// Zaten doğrulanmış (ageConfirmed) bir profil varsa mevcut değerle
+  /// önceden doldurulur ki kullanıcı tekrar cevaplamak zorunda kalmasın.
+  bool? _ageIsUnder18Choice;
+
   @override
   void initState() {
     super.initState();
@@ -156,12 +162,21 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
       _accents = List.from(profile.accents);
       _drivingLicense = List.from(profile.drivingLicense);
       _projectVideos = List.from(profile.projectVideos);
+
+      final ageAlreadyConfirmed = profile.ageConfirmed && (user?.ageConfirmed ?? true);
+      if (ageAlreadyConfirmed) {
+        _ageIsUnder18Choice = profile.isUnder18;
+      }
     } else {
       if (user != null) {
         _fullNameController.text = user.fullName;
         _phoneController.text = user.phone;
         _guardianNameController.text = user.guardianName ?? '';
         _guardianPhoneController.text = user.guardianPhone ?? '';
+
+        if (user.ageConfirmed) {
+          _ageIsUnder18Choice = user.isUnder18;
+        }
       }
     }
   }
@@ -211,7 +226,22 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
     final isPhoneValid = phone.isNotEmpty;
     final isPhotoValid = photo != null && photo.isNotEmpty;
 
-    final canSubmitForApproval = isFullNameValid && isEmailValid && isPhoneValid && isPhotoValid;
+    // 18 yaş doğrulaması: kullanıcı bu ekranda "büyüğüm/küçüğüm" seçimini
+    // yapmadıysa VE hesabı zaten önceden doğrulanmamışsa, zorunlu alan
+    // olarak eksik sayılır — hesap admin onayına sunulamaz.
+    final resolvedIsUnder18 = _ageIsUnder18Choice ?? currentProfile?.isUnder18 ?? authProvider.user?.isUnder18 ?? false;
+    final isAgeAnswered = _ageIsUnder18Choice != null ||
+        (currentProfile?.ageConfirmed == true && (authProvider.user?.ageConfirmed ?? true));
+    final guardianName = _guardianNameController.text.trim();
+    final guardianPhone = _guardianPhoneController.text.trim();
+    final isGuardianInfoValid = !resolvedIsUnder18 || (guardianName.isNotEmpty && guardianPhone.isNotEmpty);
+
+    final canSubmitForApproval = isFullNameValid &&
+        isEmailValid &&
+        isPhoneValid &&
+        isPhotoValid &&
+        isAgeAnswered &&
+        isGuardianInfoValid;
 
     String targetApprovalStatus = currentProfile?.approvalStatus ?? 'draft';
     if (canSubmitForApproval && (targetApprovalStatus == 'draft' || targetApprovalStatus == 'incomplete' || targetApprovalStatus == 'rejected')) {
@@ -224,7 +254,8 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
       email: email,
       phone: phone,
       emergencyPhone: _emergencyPhoneController.text.trim().isEmpty ? null : _emergencyPhoneController.text.trim(),
-      isUnder18: currentProfile?.isUnder18 ?? authProvider.user?.isUnder18 ?? false,
+      isUnder18: resolvedIsUnder18,
+      ageConfirmed: isAgeAnswered,
       guardianName: _guardianNameController.text.trim().isEmpty ? null : _guardianNameController.text.trim(),
       guardianPhone: _guardianPhoneController.text.trim().isEmpty ? null : _guardianPhoneController.text.trim(),
       bankIban: _bankIbanController.text.trim().isEmpty ? null : _bankIbanController.text.trim(),
@@ -279,6 +310,8 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
           if (!isEmailValid) missingList.add('• E-posta');
           if (!isPhoneValid) missingList.add('• Telefon');
           if (!isPhotoValid) missingList.add('• Profil Resmi / Fotoğraf');
+          if (!isAgeAnswered) missingList.add('• 18 Yaş Doğrulaması (büyüğüm / küçüğüm seçimi)');
+          if (isAgeAnswered && !isGuardianInfoValid) missingList.add('• Veli Adı Soyadı ve Telefonu (18 yaş altı için zorunlu)');
 
           showDialog(
             context: context,
@@ -851,52 +884,8 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                if ((profile?.isUnder18 == true) ||
-                    (context.watch<AuthProvider>().user?.isUnder18 == true) ||
-                    _guardianNameController.text.isNotEmpty ||
-                    _guardianPhoneController.text.isNotEmpty) ...[
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: Colors.amber.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.amber.withValues(alpha: 0.4)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            const Icon(Icons.child_care, color: Colors.amber, size: 20),
-                            const SizedBox(width: 8),
-                            Text(
-                              '🔞 Veli / Ebeveyn İletişim Bilgileri',
-                              style: GoogleFonts.outfit(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.amber,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        _buildTextField(
-                          controller: _guardianNameController,
-                          label: 'Veli Adı Soyadı',
-                          icon: Icons.person_outline,
-                        ),
-                        const SizedBox(height: 12),
-                        _buildTextField(
-                          controller: _guardianPhoneController,
-                          label: 'Veli Telefon Numarası',
-                          icon: Icons.phone_outlined,
-                          keyboardType: TextInputType.phone,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                ],
+                _buildAgeConfirmationSection(profile),
+                const SizedBox(height: 16),
 
                 Row(
                   children: [
@@ -1963,6 +1952,130 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  // ═══════════════════════════════════════
+  // 18 YAŞ DOĞRULAMASI (ZORUNLU)
+  // ═══════════════════════════════════════
+
+  /// 18 yaş doğrulama bölümü — HER ZAMAN görünür (koşullu gizlenmez).
+  /// Google ile kayıt olan kullanıcılar dahil, bu bilgi cevaplanmadan
+  /// profil admin onayına sunulamaz (bkz. _handleSave -> isAgeAnswered).
+  Widget _buildAgeConfirmationSection(ActorProfileModel? profile) {
+    final authUser = context.watch<AuthProvider>().user;
+    final alreadyConfirmed = (profile?.ageConfirmed ?? true) && (authUser?.ageConfirmed ?? true);
+    final needsAnswer = !alreadyConfirmed && _ageIsUnder18Choice == null;
+    final isUnder18Selected = _ageIsUnder18Choice == true;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: needsAnswer ? AppTheme.error.withValues(alpha: 0.08) : AppTheme.surfaceCard,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: needsAnswer ? AppTheme.error : AppTheme.accent.withValues(alpha: 0.3),
+          width: needsAnswer ? 1.4 : 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.cake_outlined, color: needsAnswer ? AppTheme.error : AppTheme.accent, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  needsAnswer ? '18 Yaş Doğrulaması Gerekli ⚠️ (Zorunlu)' : '18 Yaş Doğrulaması',
+                  style: GoogleFonts.outfit(
+                    fontWeight: FontWeight.bold,
+                    color: needsAnswer ? AppTheme.error : AppTheme.textPrimary,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (needsAnswer) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Profilinizi admin onayına sunabilmeniz için önce yaşınızı doğrulamanız gerekiyor.',
+              style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textSecondary),
+            ),
+          ],
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => setState(() => _ageIsUnder18Choice = false),
+                  style: OutlinedButton.styleFrom(
+                    backgroundColor: _ageIsUnder18Choice == false ? AppTheme.accent : null,
+                    side: const BorderSide(color: AppTheme.accent),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  child: Text(
+                    '18 Yaşından Büyüğüm',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: _ageIsUnder18Choice == false ? Colors.white : AppTheme.accent,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => setState(() => _ageIsUnder18Choice = true),
+                  style: OutlinedButton.styleFrom(
+                    backgroundColor: isUnder18Selected ? Colors.amber : null,
+                    side: const BorderSide(color: Colors.amber),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  child: Text(
+                    '18 Yaşından Küçüğüm',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: isUnder18Selected ? Colors.black87 : Colors.amber.shade900,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (isUnder18Selected) ...[
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                const Icon(Icons.child_care, color: Colors.amber, size: 18),
+                const SizedBox(width: 6),
+                Text(
+                  'Veli / Ebeveyn İletişim Bilgileri (Zorunlu)',
+                  style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.amber.shade900, fontSize: 12),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            _buildTextField(
+              controller: _guardianNameController,
+              label: 'Veli Adı Soyadı',
+              icon: Icons.person_outline,
+            ),
+            const SizedBox(height: 12),
+            _buildTextField(
+              controller: _guardianPhoneController,
+              label: 'Veli Telefon Numarası',
+              icon: Icons.phone_outlined,
+              keyboardType: TextInputType.phone,
+            ),
+          ],
+        ],
+      ),
     );
   }
 

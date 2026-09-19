@@ -1,0 +1,18 @@
+{
+  "projects": {
+    "default": "castelle-ce64b"
+  },
+  "targets": {
+    "castelle-ce64b": {
+      "hosting": {
+        "legal": [
+          "castelle-ce64b"
+        ],
+        "app": [
+          "castelle-web"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

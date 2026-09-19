@@ -40,15 +40,169 @@ class _LoginScreenState extends State<LoginScreen> {
     final success = await authProvider.signInWithGoogle();
     if (mounted) setState(() => _isGoogleLoading = false);
 
-    if (!success && mounted && authProvider.errorMessage != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(authProvider.errorMessage!),
-          backgroundColor: AppTheme.error,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
+    if (!success && mounted) {
+      // Bu Gmail hesabıyla ilk kez giriş yapılıyor — daha önce kayıt/giriş
+      // ekranında sorulan 18 yaş kontrolü bu akışta atlanmıştı. Hesabı
+      // tamamlamadan önce burada da aynı soruyu sormamız gerekiyor.
+      if (authProvider.pendingGoogleUser != null) {
+        await _showGoogleAgeVerificationDialog();
+        return;
+      }
+      if (authProvider.errorMessage != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(authProvider.errorMessage!),
+            backgroundColor: AppTheme.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
+    }
+  }
+
+  /// Google ile ilk kez giriş yapan (yeni) bir kullanıcı için 18 yaş / veli
+  /// bilgisi dialog'unu gösterir. Normal e-posta kaydındaki ile aynı kuralı uygular.
+  Future<void> _showGoogleAgeVerificationDialog() async {
+    bool? isOver18;
+    final guardianNameController = TextEditingController();
+    final guardianPhoneController = TextEditingController();
+    final dialogFormKey = GlobalKey<FormState>();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Text('Yaş Doğrulama', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+              content: SingleChildScrollView(
+                child: Form(
+                  key: dialogFormKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Hesabınızı oluşturmadan önce lütfen yaş durumunuzu belirtin.',
+                        style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF4B5563)),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                backgroundColor: isOver18 == true ? AppTheme.primary.withValues(alpha: 0.08) : null,
+                                side: BorderSide(color: isOver18 == true ? AppTheme.primary : const Color(0xFFD1D5DB)),
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                              onPressed: () => setDialogState(() => isOver18 = true),
+                              child: Text('18 Yaşından Büyüğüm', textAlign: TextAlign.center, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600)),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                backgroundColor: isOver18 == false ? AppTheme.primary.withValues(alpha: 0.08) : null,
+                                side: BorderSide(color: isOver18 == false ? AppTheme.primary : const Color(0xFFD1D5DB)),
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                              onPressed: () => setDialogState(() => isOver18 = false),
+                              child: Text('18 Yaşından Küçüğüm', textAlign: TextAlign.center, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600)),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (isOver18 == false) ...[
+                        const SizedBox(height: 16),
+                        Text(
+                          '18 yaşından küçük kullanıcıların kaydolabilmesi için veli bilgileri zorunludur.',
+                          style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF6B7280)),
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: guardianNameController,
+                          textCapitalization: TextCapitalization.words,
+                          decoration: const InputDecoration(labelText: 'Veli Ad Soyadı *'),
+                          validator: (val) => (isOver18 == false && (val == null || val.trim().isEmpty))
+                              ? 'Lütfen velinizin ad soyadını girin.'
+                              : null,
+                        ),
+                        const SizedBox(height: 10),
+                        TextFormField(
+                          controller: guardianPhoneController,
+                          keyboardType: TextInputType.phone,
+                          decoration: const InputDecoration(labelText: 'Veli Telefon Numarası *'),
+                          validator: (val) => (isOver18 == false && (val == null || val.trim().isEmpty))
+                              ? 'Lütfen velinizin telefon numarasını girin.'
+                              : null,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  child: const Text('Vazgeç'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    if (isOver18 == null) {
+                      ScaffoldMessenger.of(dialogContext).showSnackBar(
+                        const SnackBar(content: Text('Lütfen yaş durumunuzu seçin.')),
+                      );
+                      return;
+                    }
+                    if (!dialogFormKey.currentState!.validate()) return;
+                    Navigator.pop(dialogContext, true);
+                  },
+                  child: const Text('Devam Et'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (!mounted) return;
+    final authProvider = context.read<AuthProvider>();
+
+    if (confirmed == true) {
+      setState(() => _isGoogleLoading = true);
+      final success = await authProvider.completeGoogleRegistration(
+        isUnder18: isOver18 == false,
+        guardianName: isOver18 == false ? guardianNameController.text.trim() : null,
+        guardianPhone: isOver18 == false ? guardianPhoneController.text.trim() : null,
       );
+      if (mounted) setState(() => _isGoogleLoading = false);
+      if (!success && mounted && authProvider.errorMessage != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(authProvider.errorMessage!),
+            backgroundColor: AppTheme.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
+    } else {
+      await authProvider.cancelPendingGoogleRegistration();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Kayıt tamamlanmadı. Devam etmek için yaş bilginizi onaylamanız gerekir.'),
+            backgroundColor: AppTheme.warning,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
     }
   }
 

@@ -121,6 +121,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
       isUnder18: _isOver18 == false,
       guardianName: _isOver18 == false ? _guardianNameController.text.trim() : null,
       guardianPhone: _isOver18 == false ? _guardianPhoneController.text.trim() : null,
+      // Bu ekranda yaş sorusu zaten yukarıda soruldu ve doğrulandı.
+      ageVerified: true,
     );
     if (mounted) setState(() => _isGoogleLoading = false);
 

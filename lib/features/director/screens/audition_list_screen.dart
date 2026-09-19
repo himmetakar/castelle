@@ -208,24 +208,29 @@ class _AuditionListScreenState extends State<AuditionListScreen>
               ? const Center(
                   child: CircularProgressIndicator(color: AppTheme.accent),
                 )
-              : auditions.isEmpty
-                  ? _buildEmptyState()
-                  : RefreshIndicator(
-                      onRefresh: () async {
-                        _loadAuditions(_tabs[_tabController.index]);
-                      },
-                      color: AppTheme.accent,
-                      child: ListView.separated(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: auditions.length,
-                        separatorBuilder: (_, i) =>
-                            const SizedBox(height: 12),
-                        itemBuilder: (context, index) {
-                          return _buildAuditionCard(
-                              auditions[index], index);
-                        },
-                      ),
-                    ),
+              : (auditions.isEmpty && provider.errorMessage != null)
+                  ? _buildErrorState(provider.errorMessage!)
+                  : auditions.isEmpty
+                      ? _buildEmptyState()
+                      : RefreshIndicator(
+                          onRefresh: () async {
+                            _loadAuditions(_tabs[_tabController.index]);
+                          },
+                          color: AppTheme.accent,
+                          child: ListView.separated(
+                            padding: const EdgeInsets.all(16),
+                            itemCount: auditions.length,
+                            separatorBuilder: (_, i) =>
+                                const SizedBox(height: 12),
+                            itemBuilder: (context, index) {
+                              final audition = auditions[index];
+                              return KeyedSubtree(
+                                key: ValueKey(audition.id.isNotEmpty ? audition.id : index),
+                                child: _buildSafeAuditionCard(audition, index),
+                              );
+                            },
+                          ),
+                        ),
           if (_isDownloading)
             Container(
               color: Colors.black54,
@@ -350,6 +355,80 @@ class _AuditionListScreenState extends State<AuditionListScreen>
     );
   }
 
+  Widget _buildErrorState(String message) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.error_outline,
+              size: 56,
+              color: AppTheme.error.withValues(alpha: 0.6),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Audition\'lar yüklenirken bir sorun oluştu',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.outfit(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: AppTheme.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                fontSize: 12.5,
+                color: AppTheme.textTertiary,
+              ),
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: () => _loadAuditions(_tabs[_tabController.index]),
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Tekrar Dene'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// [_buildAuditionCard]'ı hata sınırı (error boundary) içinde çalıştırır.
+  /// Tek bir bozuk kaydın (örn. eksik/garip veri) tüm listeyi/ekranı
+  /// bozmasını engeller — o kart yerine sade bir hata kartı gösterilir.
+  Widget _buildSafeAuditionCard(AuditionModel audition, int index) {
+    try {
+      return _buildAuditionCard(audition, index);
+    } catch (e, stack) {
+      debugPrint('⚠️ [AuditionListScreen] Kart render hatası (id: ${audition.id}): $e\n$stack');
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceCard,
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+          border: Border.all(color: AppTheme.error.withValues(alpha: 0.4)),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: AppTheme.error, size: 22),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Bu audition kaydı görüntülenemedi.',
+                style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textSecondary),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
   Widget _buildAuditionCard(AuditionModel audition, int index) {
     final isSelected = _selectedAuditionIds.contains(audition.id);
 
@@ -445,10 +524,12 @@ class _AuditionListScreenState extends State<AuditionListScreen>
                     runSpacing: 4,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      _buildMiniChip(
-                          audition.projectTitle, AppTheme.info),
-                      _buildMiniChip(
-                          audition.roleName, AppTheme.accent),
+                      if (audition.projectTitle.trim().isNotEmpty)
+                        _buildMiniChip(
+                            audition.projectTitle, AppTheme.info),
+                      if (audition.roleName.trim().isNotEmpty)
+                        _buildMiniChip(
+                            audition.roleName, AppTheme.accent),
                       if (audition.requestedBudget != null)
                         _buildMiniChip(
                           audition.isBudgetChanged
@@ -558,8 +639,12 @@ class _AuditionListScreenState extends State<AuditionListScreen>
   }
 
   String _getInitials(String name) {
-    if (name.isEmpty) return '?';
-    final parts = name.trim().split(' ');
+    // Sadece boşluklardan oluşan isimler için de güvenli davran
+    // (önceden name.trim() sonrası boş kalırsa RangeError fırlatıyordu).
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return '?';
+    final parts = trimmed.split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    if (parts.isEmpty) return '?';
     if (parts.length >= 2) {
       return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
     }

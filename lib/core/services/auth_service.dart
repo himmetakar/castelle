@@ -10,6 +10,27 @@ import 'package:castelle/core/services/notification_service.dart';
 /// Castelle - Firebase Auth Service
 /// Kimlik doğrulama ve kullanıcı yönetim servisi (Gmail & E-posta Kimlik Doğrulama)
 
+/// Google ile ilk kez giriş yapan bir kullanıcı için yaş doğrulaması henüz
+/// yapılmadığında fırlatılır. Firebase Auth oturumu zaten açılmıştır;
+/// UI katmanı yaş/veli bilgisini topladıktan sonra
+/// [AuthService.completeGoogleRegistration] ile kaydı tamamlamalıdır.
+class GoogleAgeVerificationRequired implements Exception {
+  final String uid;
+  final String email;
+  final String fullName;
+  final String? photoUrl;
+
+  GoogleAgeVerificationRequired({
+    required this.uid,
+    required this.email,
+    required this.fullName,
+    this.photoUrl,
+  });
+
+  @override
+  String toString() => 'GoogleAgeVerificationRequired($email)';
+}
+
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -171,6 +192,15 @@ class AuthService {
 
       await user.updateDisplayName(fullName);
 
+      // Aktivasyon (e-posta doğrulama) e-postası gönder.
+      // Kullanıcı linke tıklayıp e-postasını doğrulamadan uygulama verisine erişemez.
+      try {
+        await user.sendEmailVerification();
+      } catch (e) {
+        // Doğrulama e-postası gönderilemese bile kayıt akışını durdurmuyoruz;
+        // kullanıcı doğrulama ekranından "Tekrar Gönder" ile yeniden deneyebilir.
+      }
+
       final calculatedAge = age ?? (birthDate != null ? (DateTime.now().year - birthDate.year) : null);
       final under18 = isUnder18 || (calculatedAge != null && calculatedAge < 18);
 
@@ -197,6 +227,9 @@ class AuthService {
         hasAcceptedTerms: hasAcceptedTerms,
         acceptedTermsAt: DateTime.now(),
         isActive: isDesignatedAdmin || !under18,
+        // Google ile değil, normal e-posta/şifre ile kaydolan kullanıcılar
+        // e-postalarını doğrulamadan uygulama içine giremez.
+        emailVerificationRequired: !isDesignatedAdmin,
       );
 
       await _firestore
@@ -298,10 +331,15 @@ class AuthService {
   }
 
   /// Google / Gmail ile Giriş Yap / Kayıt Ol
+  /// [ageVerified] true değilse ve bu Google hesabıyla ilişkili bir Firestore
+  /// kaydı yoksa (yani ilk kez kaydoluyorsa), [GoogleAgeVerificationRequired]
+  /// fırlatılır — UI katmanı yaş/veli bilgisini topladıktan sonra
+  /// [completeGoogleRegistration] ile kaydı tamamlamalıdır.
   Future<UserModel?> signInWithGoogle({
     bool isUnder18 = false,
     String? guardianName,
     String? guardianPhone,
+    bool ageVerified = false,
   }) async {
     try {
       final GoogleSignIn googleSignIn = GoogleSignIn(
@@ -399,44 +437,41 @@ class AuthService {
           return UserModel.fromMap(updatedDoc.data()!, uid);
         }
       } else {
-        // Yeni kullanıcı dokümanı oluştur
-        final assignedRole = isDesignatedAdmin ? UserRole.admin : UserRole.actor;
-        final assignedName = fullName.isNotEmpty && fullName != 'Google Kullanıcısı'
-            ? fullName
-            : (isDesignatedAdmin ? designatedAdmin['name']! : fullName);
-
-        final userModel = UserModel(
+        // Yeni kullanıcı — Firestore'da hiç kaydı yok.
+        // ÖNEMLİ: Firestore dokümanını platformdan bağımsız her zaman HEMEN
+        // oluşturuyoruz (web/mobil popup akışındaki farklılıklara güvenmemek
+        // için). Yaş doğrulaması henüz yapılmadıysa hesap 'incomplete'
+        // durumunda ve admin onay kuyruğunun DIŞINDA oluşturulur —
+        // kullanıcı Profilini Düzenle ekranından bu bilgiyi doldurmadan
+        // hesabı admin onayına düşmez. Ayrıca UI'a da haber veriyoruz ki
+        // (mümkünse) girişin hemen ardından bir dialog ile de sorulabilsin.
+        final userModel = await _createGoogleUserDocument(
           uid: uid,
           email: email,
-          fullName: assignedName,
-          phone: user.phoneNumber ?? '',
-          role: assignedRole,
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-          profilePhotoUrl: photoUrl,
+          fullName: fullName,
+          phone: user.phoneNumber,
+          photoUrl: photoUrl,
+          isDesignatedAdmin: isDesignatedAdmin,
+          designatedAdminName: isDesignatedAdmin ? designatedAdmin['name'] : null,
           isUnder18: isUnder18,
-          guardianName: isUnder18 ? guardianName?.trim() : null,
-          guardianPhone: isUnder18 ? guardianPhone?.trim() : null,
-          isGuardianApproved: !isUnder18,
-          guardianApprovalStatus: isUnder18 ? 'pending' : 'approved',
-          hasAcceptedTerms: true,
-          acceptedTermsAt: DateTime.now(),
+          guardianName: guardianName,
+          guardianPhone: guardianPhone,
+          ageConfirmed: ageVerified,
         );
 
-        await _firestore
-            .collection(AppConstants.usersCollection)
-            .doc(uid)
-            .set({
-          ...userModel.toMap(),
-          'isActive': isDesignatedAdmin || !isUnder18,
-          'isHidden': isUnder18,
-          'approvalStatus': isDesignatedAdmin ? 'approved' : (isUnder18 ? 'pending_guardian' : 'pending'),
-          'createdAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
+        if (!ageVerified) {
+          throw GoogleAgeVerificationRequired(
+            uid: uid,
+            email: email,
+            fullName: fullName,
+            photoUrl: photoUrl,
+          );
+        }
 
         return userModel;
       }
+    } on GoogleAgeVerificationRequired {
+      rethrow;
     } on FirebaseAuthException catch (e) {
       throw _handleAuthError(e);
     } catch (e) {
@@ -446,6 +481,124 @@ class AuthService {
       }
       throw Exception('Google ile giriş gerçekleştirilemedi: $e');
     }
+  }
+
+  /// Yaş doğrulaması (ve gerekliyse veli bilgisi) toplandıktan sonra,
+  /// Google ile ilk kez giriş yapan bir kullanıcının Firestore kaydını oluşturur.
+  /// Firebase Auth oturumu [signInWithGoogle] tarafından zaten açılmış olmalıdır.
+  Future<UserModel> completeGoogleRegistration({
+    required bool isUnder18,
+    String? guardianName,
+    String? guardianPhone,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw Exception('Oturum bulunamadı. Lütfen Gmail ile girişi tekrar deneyin.');
+    }
+
+    final uid = user.uid;
+    final email = user.email ?? '';
+    final fullName = user.displayName ?? 'Google Kullanıcısı';
+    final photoUrl = user.photoURL;
+
+    final designatedAdmin = designatedAdmins.firstWhere(
+      (a) => a['email']!.toLowerCase() == email.toLowerCase(),
+      orElse: () => {},
+    );
+    final isDesignatedAdmin = designatedAdmin.isNotEmpty;
+
+    return _createGoogleUserDocument(
+      uid: uid,
+      email: email,
+      fullName: fullName,
+      phone: user.phoneNumber,
+      photoUrl: photoUrl,
+      isDesignatedAdmin: isDesignatedAdmin,
+      designatedAdminName: isDesignatedAdmin ? designatedAdmin['name'] : null,
+      isUnder18: isUnder18,
+      guardianName: guardianName,
+      guardianPhone: guardianPhone,
+      ageConfirmed: true,
+    );
+  }
+
+  /// Google ile ilk kayıt olan bir kullanıcı için Firestore dokümanını oluşturur.
+  /// [ageConfirmed] false ise (yaş sorusu henüz cevaplanmadıysa), hesap
+  /// 'incomplete' durumunda ve admin onay kuyruğunun (streamPendingActors)
+  /// DIŞINDA oluşturulur; admin'e "Yeni Üye Kaydı" bildirimi de o ana kadar
+  /// GÖNDERİLMEZ. Kullanıcı Profilini Düzenle ekranından yaş bilgisini
+  /// tamamladığında hesap normal onay akışına girer.
+  Future<UserModel> _createGoogleUserDocument({
+    required String uid,
+    required String email,
+    required String fullName,
+    String? phone,
+    String? photoUrl,
+    required bool isDesignatedAdmin,
+    String? designatedAdminName,
+    required bool isUnder18,
+    String? guardianName,
+    String? guardianPhone,
+    required bool ageConfirmed,
+  }) async {
+    final assignedRole = isDesignatedAdmin ? UserRole.admin : UserRole.actor;
+    final assignedName = fullName.isNotEmpty && fullName != 'Google Kullanıcısı'
+        ? fullName
+        : (isDesignatedAdmin ? (designatedAdminName ?? fullName) : fullName);
+
+    final userModel = UserModel(
+      uid: uid,
+      email: email,
+      fullName: assignedName,
+      phone: phone ?? '',
+      role: assignedRole,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+      profilePhotoUrl: photoUrl,
+      isUnder18: isUnder18,
+      guardianName: isUnder18 ? guardianName?.trim() : null,
+      guardianPhone: isUnder18 ? guardianPhone?.trim() : null,
+      isGuardianApproved: !isUnder18,
+      guardianApprovalStatus: isUnder18 ? 'pending' : 'approved',
+      hasAcceptedTerms: true,
+      acceptedTermsAt: DateTime.now(),
+      // Google hesabının e-postası zaten Google tarafından doğrulanmıştır,
+      // ayrıca bir aktivasyon e-postasına gerek yoktur.
+      emailVerificationRequired: false,
+      ageConfirmed: ageConfirmed,
+    );
+
+    final String approvalStatus = isDesignatedAdmin
+        ? 'approved'
+        : (!ageConfirmed
+            ? 'incomplete' // Yaş sorusu cevaplanmadan admin onay kuyruğuna DÜŞMEZ
+            : (isUnder18 ? 'pending_guardian' : 'pending'));
+
+    await _firestore.collection(AppConstants.usersCollection).doc(uid).set({
+      ...userModel.toMap(),
+      'isActive': isDesignatedAdmin || (!isUnder18 && ageConfirmed),
+      'isHidden': isUnder18 || !ageConfirmed,
+      'approvalStatus': approvalStatus,
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    // Admin kullanıcılarına yeni üye bildirimi gönder — SADECE yaş bilgisi
+    // gerçekten doğrulanmışsa (yani hesap fiilen onaya sunulabilir durumdaysa).
+    if (ageConfirmed) {
+      try {
+        final roleLabel = assignedRole.displayName;
+        final extraTag = isUnder18 ? ' (18 Yaş Altı - Veli Onayı Bekliyor)' : '';
+        await NotificationService().sendBulkNotification(
+          title: 'Yeni Üye Kaydı 👤',
+          body: '$assignedName ($roleLabel)$extraTag platforma yeni kayıt oldu.',
+          type: NotificationType.systemMessage,
+          target: NotificationTarget.admins,
+        );
+      } catch (_) {}
+    }
+
+    return userModel;
   }
 
   /// Yasal Sözleşmeler ve KVKK Onayını Güncelle
@@ -560,6 +713,32 @@ class AuthService {
     } catch (e) {
       throw Exception(e.toString().replaceAll("Exception: ", ""));
     }
+  }
+
+  /// Mevcut Firebase Auth kullanıcısının e-posta adresi doğrulanmış mı?
+  /// (Google ile giriş yapan kullanıcıların e-postası zaten doğrulanmış sayılır.)
+  bool get isEmailVerified => _auth.currentUser?.emailVerified ?? true;
+
+  /// Aktivasyon (e-posta doğrulama) e-postasını yeniden gönder
+  Future<void> resendVerificationEmail() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw Exception('Oturum bulunamadı.');
+    }
+    if (user.emailVerified) return;
+    await user.sendEmailVerification();
+  }
+
+  /// Firebase Auth kullanıcı bilgisini sunucudan yeniden yükle
+  /// (kullanıcı aktivasyon linkine tıkladıktan sonra emailVerified durumunu
+  /// güncel olarak okuyabilmek için gereklidir).
+  Future<bool> reloadCurrentUserAndCheckVerified() async {
+    final user = _auth.currentUser;
+    if (user == null) return false;
+    try {
+      await user.reload();
+    } catch (_) {}
+    return _auth.currentUser?.emailVerified ?? false;
   }
 
   /// FCM Token güncelle

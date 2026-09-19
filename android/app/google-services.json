@@ -79,10 +79,11 @@
               "client_type": 3
             },
             {
-              "client_id": "977939722051-vskf7va7k1ncaj3s057fdl9l08rff8b4.apps.googleusercontent.com",
+              "client_id": "977939722051-afplrdp46i8cvaabhgkareram8i4nmu4.apps.googleusercontent.com",
               "client_type": 2,
               "ios_info": {
-                "bundle_id": "com.castelleapp.app"
+                "bundle_id": "com.castelle.odiapp",
+                "app_store_id": "6761750883"
               }
             }
           ]
@@ -163,10 +164,11 @@
               "client_type": 3
             },
             {
-              "client_id": "977939722051-vskf7va7k1ncaj3s057fdl9l08rff8b4.apps.googleusercontent.com",
+              "client_id": "977939722051-afplrdp46i8cvaabhgkareram8i4nmu4.apps.googleusercontent.com",
               "client_type": 2,
               "ios_info": {
-                "bundle_id": "com.castelleapp.app"
+                "bundle_id": "com.castelle.odiapp",
+                "app_store_id": "6761750883"
               }
             }
           ]
