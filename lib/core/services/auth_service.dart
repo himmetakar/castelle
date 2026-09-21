@@ -339,7 +339,94 @@ class AuthService {
     String? guardianName,
     String? guardianPhone,
     bool ageVerified = false,
-  }) async {
+  }) {
+    return _signInWithSocial(
+      label: 'Google',
+      isUnder18: isUnder18,
+      guardianName: guardianName,
+      guardianPhone: guardianPhone,
+      signIn: () async {
+        final GoogleSignIn googleSignIn = GoogleSignIn(
+          serverClientId: '977939722051-78bh3stbhgh85rsub18ra2c0566l1gq7.apps.googleusercontent.com',
+        );
+        try {
+          await googleSignIn.signOut();
+        } catch (_) {}
+
+        final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
+        if (googleUser == null) return null;
+
+        final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+        return _auth.signInWithCredential(GoogleAuthProvider.credential(
+          accessToken: googleAuth.accessToken,
+          idToken: googleAuth.idToken,
+        ));
+      },
+      // Google ile ilk kez kaydolan kullanıcı için yaş doğrulaması zorunlu:
+      // doğrulanmamışsa hesap 'incomplete' durumunda oluşturulur ve UI'a
+      // GoogleAgeVerificationRequired ile haber verilir.
+      onCreateNewUser: ({
+        required String uid,
+        required String email,
+        required String fullName,
+        String? phone,
+        String? photoUrl,
+        required bool isDesignatedAdmin,
+        String? designatedAdminName,
+      }) async {
+        final userModel = await _createGoogleUserDocument(
+          uid: uid,
+          email: email,
+          fullName: fullName,
+          phone: phone,
+          photoUrl: photoUrl,
+          isDesignatedAdmin: isDesignatedAdmin,
+          designatedAdminName: designatedAdminName,
+          isUnder18: isUnder18,
+          guardianName: guardianName,
+          guardianPhone: guardianPhone,
+          ageConfirmed: ageVerified,
+        );
+
+        if (!ageVerified) {
+          throw GoogleAgeVerificationRequired(
+            uid: uid,
+            email: email,
+            fullName: fullName,
+            photoUrl: photoUrl,
+          );
+        }
+
+        return userModel;
+      },
+    );
+  }
+
+  /// Apple ile Giriş Yap / Kayıt Ol (iOS native akış)
+  Future<UserModel?> signInWithApple({
+    bool isUnder18 = false,
+    String? guardianName,
+    String? guardianPhone,
+  }) {
+    return _signInWithSocial(
+      label: 'Apple',
+      isUnder18: isUnder18,
+      guardianName: guardianName,
+      guardianPhone: guardianPhone,
+      signIn: () => _auth.signInWithProvider(
+        AppleAuthProvider()
+          ..addScope('email')
+          ..addScope('name'),
+      ),
+    );
+  }
+
+  /// Apple ile bağlı hesapta Apple token'ını iptal eder (hesap silmeden önce).
+  /// Yeni authorization code için Apple ile yeniden onay istenir.
+  Future<void> revokeAppleTokenIfNeeded() async {
+    final user = _auth.currentUser;
+    if (user == null || !user.providerData.any((p) => p.providerId == 'apple.com')) return;
+
     try {
       final credential = await user.reauthenticateWithProvider(AppleAuthProvider());
       final code = credential.additionalUserInfo?.authorizationCode;
@@ -360,6 +447,18 @@ class AuthService {
     bool isUnder18 = false,
     String? guardianName,
     String? guardianPhone,
+    // Sağlanırsa, yeni kullanıcı dokümanı oluşturma akışını devralır
+    // (örn. Google için yaş doğrulama zorunluluğu). Sağlanmazsa varsayılan
+    // (Apple'ın bugüne kadarki) davranış kullanılır.
+    Future<UserModel> Function({
+      required String uid,
+      required String email,
+      required String fullName,
+      String? phone,
+      String? photoUrl,
+      required bool isDesignatedAdmin,
+      String? designatedAdminName,
+    })? onCreateNewUser,
   }) async {
     final placeholderName = '$label Kullanıcısı';
     try {
@@ -443,36 +542,50 @@ class AuthService {
           return await getUserData(uid);
         }
       } else {
-        // Yeni kullanıcı — Firestore'da hiç kaydı yok.
-        // ÖNEMLİ: Firestore dokümanını platformdan bağımsız her zaman HEMEN
-        // oluşturuyoruz (web/mobil popup akışındaki farklılıklara güvenmemek
-        // için). Yaş doğrulaması henüz yapılmadıysa hesap 'incomplete'
-        // durumunda ve admin onay kuyruğunun DIŞINDA oluşturulur —
-        // kullanıcı Profilini Düzenle ekranından bu bilgiyi doldurmadan
-        // hesabı admin onayına düşmez. Ayrıca UI'a da haber veriyoruz ki
-        // (mümkünse) girişin hemen ardından bir dialog ile de sorulabilsin.
-        final userModel = await _createGoogleUserDocument(
-          uid: uid,
-          email: email,
-          fullName: fullName,
-          phone: user.phoneNumber,
-          photoUrl: photoUrl,
-          isDesignatedAdmin: isDesignatedAdmin,
-          designatedAdminName: isDesignatedAdmin ? designatedAdmin['name'] : null,
-          isUnder18: isUnder18,
-          guardianName: guardianName,
-          guardianPhone: guardianPhone,
-          ageConfirmed: ageVerified,
-        );
-
-        if (!ageVerified) {
-          throw GoogleAgeVerificationRequired(
+        if (onCreateNewUser != null) {
+          return await onCreateNewUser(
             uid: uid,
             email: email,
             fullName: fullName,
+            phone: user.phoneNumber,
             photoUrl: photoUrl,
+            isDesignatedAdmin: isDesignatedAdmin,
+            designatedAdminName: isDesignatedAdmin ? designatedAdmin['name'] : null,
           );
         }
+
+        // Yeni kullanıcı dokümanı oluştur (varsayılan davranış — Apple)
+        final assignedRole = isDesignatedAdmin ? UserRole.admin : UserRole.actor;
+        final assignedName = fullName.isNotEmpty && fullName != placeholderName
+            ? fullName
+            : (isDesignatedAdmin ? designatedAdmin['name']! : fullName);
+
+        final userModel = UserModel(
+          uid: uid,
+          email: email,
+          fullName: assignedName,
+          phone: user.phoneNumber ?? '',
+          role: assignedRole,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+          profilePhotoUrl: photoUrl,
+          isUnder18: isUnder18,
+          guardianName: isUnder18 ? guardianName?.trim() : null,
+          guardianPhone: isUnder18 ? guardianPhone?.trim() : null,
+          isGuardianApproved: !isUnder18,
+          guardianApprovalStatus: isUnder18 ? 'pending' : 'approved',
+          hasAcceptedTerms: true,
+          acceptedTermsAt: DateTime.now(),
+        );
+
+        await _writeUser(uid, {
+          ...userModel.toMap(),
+          'isActive': isDesignatedAdmin || !isUnder18,
+          'isHidden': isUnder18,
+          'approvalStatus': isDesignatedAdmin ? 'approved' : (isUnder18 ? 'pending_guardian' : 'pending'),
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
 
         return userModel;
       }
@@ -491,8 +604,8 @@ class AuthService {
     }
   }
 
-  /// Yaş doğrulaması (ve gerekliyse veli bilgisi) toplandıktan sonra,
-  /// Google ile ilk kez giriş yapan bir kullanıcının Firestore kaydını oluşturur.
+  /// [pendingGoogleUser] doldurulduktan sonra, yaş/veli bilgisi toplanıp
+  /// Google kaydını tamamlamak için çağrılır.
   /// Firebase Auth oturumu [signInWithGoogle] tarafından zaten açılmış olmalıdır.
   Future<UserModel> completeGoogleRegistration({
     required bool isUnder18,

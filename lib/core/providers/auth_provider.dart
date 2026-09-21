@@ -279,6 +279,50 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Apple ile Giriş Yap / Kayıt Ol
+  Future<bool> signInWithApple({
+    bool isUnder18 = false,
+    String? guardianName,
+    String? guardianPhone,
+  }) {
+    return _signInWithSocial(() => _authService.signInWithApple(
+          isUnder18: isUnder18,
+          guardianName: guardianName,
+          guardianPhone: guardianPhone,
+        ));
+  }
+
+  Future<bool> _signInWithSocial(Future<UserModel?> Function() signIn) async {
+    _status = AuthStatus.loading;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final userModel = await signIn();
+      if (userModel == null) {
+        // Giriş kullanıcı tarafından iptal edildi
+        _status = AuthStatus.unauthenticated;
+        _errorMessage = null;
+        notifyListeners();
+        return false;
+      }
+
+      _user = userModel;
+      _status = AuthStatus.authenticated;
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('is_logged_in', true);
+
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _status = AuthStatus.error;
+      _errorMessage = e.toString().replaceAll('Exception: ', '');
+      notifyListeners();
+      return false;
+    }
+  }
+
   /// E-posta ve Profil Detaylarını Kaydet / Güncelle
   Future<bool> saveEmailAndDetails({
     required String email,
