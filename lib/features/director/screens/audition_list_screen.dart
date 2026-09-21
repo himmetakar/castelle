@@ -592,8 +592,14 @@ class _AuditionListScreenState extends State<AuditionListScreen>
     ).animate().fadeIn(delay: (30 + index * 25).ms);
   }
 
+  // NOT: Bu chip bir Wrap içinde kullanılıyor. Wrap'in çocuğu Flexible
+  // OLAMAZ (Flexible sadece Row/Column içinde geçerli). Debug modda bu
+  // sadece konsola hata basıyordu ama release APK'da kartın tamamen gri
+  // kutuya dönüşmesine sebep oluyordu. Genişliği ConstrainedBox ile
+  // sınırlıyoruz ki uzun proje adları taşmasın.
   Widget _buildMiniChip(String text, Color color) {
-    return Flexible(
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 220),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
         decoration: BoxDecoration(

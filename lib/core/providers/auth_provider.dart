@@ -190,6 +190,7 @@ class AuthProvider extends ChangeNotifier {
     bool isUnder18 = false,
     String? guardianName,
     String? guardianPhone,
+    bool ageVerified = false,
   }) async {
     _status = AuthStatus.loading;
     _errorMessage = null;
@@ -201,6 +202,7 @@ class AuthProvider extends ChangeNotifier {
         isUnder18: isUnder18,
         guardianName: guardianName,
         guardianPhone: guardianPhone,
+        ageVerified: ageVerified,
       );
       if (userModel == null) {
         // Giriş kullanıcı tarafından iptal edildi

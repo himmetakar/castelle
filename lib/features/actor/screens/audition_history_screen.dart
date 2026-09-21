@@ -18,6 +18,7 @@ import 'package:castelle/core/services/audition_service.dart';
 import 'package:castelle/core/services/project_service.dart';
 import 'package:castelle/core/widgets/project_details_bottom_sheet.dart';
 import 'package:castelle/features/actor/screens/audition_submit_screen.dart';
+import 'package:castelle/features/actor/screens/my_audition_detail_screen.dart';
 import 'package:castelle/features/actor/providers/audition_provider.dart';
 
 /// Castelle - Oyuncu Audition Geçmişi Ekranı
@@ -565,15 +566,20 @@ class _AuditionHistoryScreenState extends State<AuditionHistoryScreen>
       ),
     );
 
-    if (audition.status == AuditionStatus.approved) {
-      cardContent = GestureDetector(
-        onTap: () => _handleApprovedTap(audition),
-        child: MouseRegion(
-          cursor: SystemMouseCursors.click,
-          child: cardContent,
+    // Tüm audition kartları tıklanabilir — kendi audition'ının detayını
+    // (video + gönderim bilgileri) açar. Proje detayları burada gösterilmez.
+    cardContent = GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => MyAuditionDetailScreen(audition: audition),
         ),
-      );
-    }
+      ),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: cardContent,
+      ),
+    );
 
     return cardContent.animate().fadeIn(delay: (40 + index * 30).ms);
   }
