@@ -19,6 +19,7 @@ import 'package:castelle/core/models/user_model.dart';
 import 'package:castelle/core/constants/user_roles.dart';
 import 'package:castelle/features/employer/providers/project_provider.dart';
 import 'package:castelle/features/actor/widgets/skills_input_widget.dart';
+import 'package:castelle/core/services/private_profile_fields.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// Castelle - Proje Oluşturma / Düzenleme Ekranı
@@ -112,7 +113,11 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
           .where('isActive', isEqualTo: true)
           .get();
       
-      final list = snap.docs.map((doc) => UserModel.fromMap(doc.data(), doc.id)).toList();
+      // Moderatör telefonu private alt dokümanda; yetki yoksa boş gelir.
+      final list = await Future.wait(snap.docs.map((doc) async => UserModel.fromMap({
+            ...doc.data(),
+            ...await readPrivateFields(FirebaseFirestore.instance, doc.id),
+          }, doc.id)));
       setState(() {
         _allModerators = list;
         _loadingModerators = false;

@@ -4,8 +4,11 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:castelle/core/providers/auth_provider.dart';
+import 'package:castelle/core/widgets/apple_sign_in_button.dart';
 import 'package:castelle/core/theme/app_theme.dart';
+import 'package:castelle/core/constants/app_constants.dart';
 
 /// Castelle - Login Screen
 /// Gmail ve E-posta / Şifre ile Giriş Ekranı
@@ -23,6 +26,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
 
   bool _isGoogleLoading = false;
+  bool _isAppleLoading = false;
   bool _isEmailLoading = false;
   bool _showEmailForm = false;
   bool _obscurePassword = true;
@@ -206,6 +210,24 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  Future<void> _handleAppleSignIn() async {
+    setState(() => _isAppleLoading = true);
+    final authProvider = context.read<AuthProvider>();
+    final success = await authProvider.signInWithApple();
+    if (mounted) setState(() => _isAppleLoading = false);
+
+    if (!success && mounted && authProvider.errorMessage != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(authProvider.errorMessage!),
+          backgroundColor: AppTheme.error,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+    }
+  }
+
   Future<void> _handleEmailSignIn() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -303,7 +325,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
-    final isLoading = authProvider.isLoading || _isGoogleLoading || _isEmailLoading;
+    final isLoading = authProvider.isLoading || _isGoogleLoading || _isAppleLoading || _isEmailLoading;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF3F4F6),
@@ -397,7 +419,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             ).animate().fadeIn(delay: 150.ms).slideY(begin: 0.1),
                             const SizedBox(height: 8),
                             Text(
-                              'Premium Casting SaaS Platformu’na Gmail veya E-posta hesabınız ile giriş yapın.',
+                              'Premium Casting SaaS Platformu’na ${AppConstants.googleSignInEnabled ? 'Google veya ' : ''}E-posta hesabınız ile giriş yapın.',
                               textAlign: TextAlign.center,
                               style: GoogleFonts.inter(
                                 fontSize: 13.5,
@@ -408,7 +430,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
                             const SizedBox(height: 32),
 
-                            // --- GMAIL / GOOGLE ILE GIRIS BUTONU ---
+                            // --- GOOGLE ILE GIRIS BUTONU ---
+                            if (AppConstants.googleSignInEnabled)
                             SizedBox(
                               width: double.infinity,
                               height: 52,
@@ -449,7 +472,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                                 const _GoogleLogoSvg(size: 22),
                                                 const SizedBox(width: 12),
                                                 Text(
-                                                  'Gmail ile Giriş Yap',
+                                                  'Google ile Giriş Yap',
                                                   style: GoogleFonts.outfit(
                                                     fontSize: 15.5,
                                                     fontWeight: FontWeight.w600,
@@ -463,6 +486,16 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                               ),
                             ).animate().fadeIn(delay: 350.ms).scale(begin: const Offset(0.96, 0.96)),
+
+                            // --- APPLE ILE GIRIS (sadece iOS) ---
+                            if (defaultTargetPlatform == TargetPlatform.iOS) ...[
+                              if (AppConstants.googleSignInEnabled) const SizedBox(height: 12),
+                              AppleSignInButton(
+                                label: 'Apple ile Giriş Yap',
+                                isLoading: _isAppleLoading,
+                                onTap: isLoading ? null : _handleAppleSignIn,
+                              ).animate().fadeIn(delay: 400.ms),
+                            ],
 
                             const SizedBox(height: 20),
 
@@ -694,7 +727,7 @@ class _GoogleLogoSvg extends StatelessWidget {
   <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
   <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
   <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24s.92 7.54 2.56 10.78l7.97-6.19z"/>
-  <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+  <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
 </svg>
 ''';
     return SvgPicture.string(

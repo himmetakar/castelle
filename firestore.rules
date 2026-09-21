@@ -16,6 +16,12 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    // Admin veya moderatör mü? (rol users/{uid} dokümanından okunur)
+    function isAdminOrModerator() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'moderator'];
+    }
+
     // ═══════════════════════════════════════
     // USERS KOLEKSİYONU
     // ═══════════════════════════════════════
@@ -28,6 +34,12 @@ service cloud.firestore {
 
       // Kendi profilini veya yetkili işlemleri güncelleyebilir
       allow update, delete: if isOwner(userId) || isSignedIn();
+
+      // Hassas alanlar: telefon, veli telefonu, IBAN, hesap sahibi adı.
+      // Sadece sahibi ve admin/moderatör okur/yazar.
+      match /private/{docId} {
+        allow read, write: if isOwner(userId) || isAdminOrModerator();
+      }
     }
 
     // ═══════════════════════════════════════

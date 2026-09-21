@@ -7,6 +7,7 @@ import 'package:castelle/core/constants/app_constants.dart';
 import 'package:castelle/core/models/actor_profile_model.dart';
 import 'package:castelle/core/models/notification_model.dart';
 import 'package:castelle/core/services/notification_service.dart';
+import 'package:castelle/core/services/private_profile_fields.dart';
 
 
 // Castelle - Actor Profile Service
@@ -108,7 +109,9 @@ class ActorProfileService {
           .doc(uid)
           .get();
       if (!doc.exists) return null;
-      return ActorProfileModel.fromMap(doc.data()!, uid);
+      final data = Map<String, dynamic>.from(doc.data()!);
+      data.addAll(await readPrivateFields(_firestore, uid));
+      return ActorProfileModel.fromMap(data, uid);
     } catch (e) {
       debugPrint('⚠️ [ActorProfileService.getActorProfile] Error: $e');
       return null;
@@ -123,11 +126,13 @@ class ActorProfileService {
     data['isProfileComplete'] = profile.completionPercentage >= 70;
     data['completionPercentage'] = profile.completionPercentage;
     data['isActive'] = true;
+    final private = takePrivateFields(data);
 
     await _firestore
         .collection(AppConstants.usersCollection)
         .doc(profile.uid)
         .set(data, SetOptions(merge: true));
+    await writePrivateFields(_firestore, profile.uid, private);
   }
 
   /// Oyuncu profilini stream olarak dinle
@@ -136,9 +141,14 @@ class ActorProfileService {
         .collection(AppConstants.usersCollection)
         .doc(uid)
         .snapshots()
-        .map((doc) {
+        // ponytail: her snapshot'ta private dokümanı yeniden okuyor. Kendi
+        // profilini dinlemek için kullanılıyor, hacim düşük. Sıklık artarsa
+        // iki snapshot stream'ini birleştir.
+        .asyncMap((doc) async {
       if (!doc.exists) return null;
-      return ActorProfileModel.fromMap(doc.data()!, uid);
+      final data = Map<String, dynamic>.from(doc.data()!);
+      data.addAll(await readPrivateFields(_firestore, uid));
+      return ActorProfileModel.fromMap(data, uid);
     });
   }
 
@@ -268,9 +278,12 @@ class ActorProfileService {
         .where('role', isEqualTo: 'actor')
         .where('approvalStatus', isEqualTo: 'pending')
         .snapshots()
-        .map((snap) => snap.docs
-            .map((doc) => ActorProfileModel.fromMap(doc.data(), doc.id))
-            .toList()
+        // Admin ekranı telefonu gösteriyor — bekleyen her oyuncu için private okunur.
+        .asyncMap((snap) async => (await Future.wait(snap.docs.map((doc) async =>
+                ActorProfileModel.fromMap({
+                  ...doc.data(),
+                  ...await readPrivateFields(_firestore, doc.id),
+                }, doc.id))))
           ..sort((a, b) => b.uid.compareTo(a.uid)));
   }
 

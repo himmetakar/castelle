@@ -9,12 +9,22 @@ class AppConstants {
   static const String appTagline = 'Premium Casting Platform';
   static const String appVersion = '1.0.0';
 
+  // Google girişi açık/kapalı (butonlar ve metinler)
+  static const bool googleSignInEnabled = true;
+
   // Firestore Collections
   static const String usersCollection = 'users';
   static const String projectsCollection = 'projects';
   static const String auditionsCollection = 'auditions';
   static const String notificationsCollection = 'notifications';
   static const String skillsCollection = 'skills';
+
+  // Hassas profil alanları users/{uid} kök dokümanında değil,
+  // users/{uid}/private/contact alt dokümanında tutulur. Kök doküman oyuncu
+  // havuzu için tüm oturumlu kullanıcılara okunabilir; alt doküman sadece
+  // sahibine ve admin/moderatöre açıktır (bkz. firestore.rules).
+  static const String privateCollection = 'private';
+  static const String privateContactDoc = 'contact';
 
   // Storage Paths
   static const String profilePhotosPath = 'profile_photos';

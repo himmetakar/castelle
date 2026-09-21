@@ -6,6 +6,7 @@ import 'package:castelle/core/models/notification_model.dart';
 import 'package:castelle/core/constants/app_constants.dart';
 import 'package:castelle/core/constants/user_roles.dart';
 import 'package:castelle/core/services/notification_service.dart';
+import 'package:castelle/core/services/private_profile_fields.dart';
 
 /// Castelle - Firebase Auth Service
 /// Kimlik doğrulama ve kullanıcı yönetim servisi (Gmail & E-posta Kimlik Doğrulama)
@@ -129,14 +130,17 @@ class AuthService {
               data['fullName'] == 'Oyuncu') {
             updateData['fullName'] = adminName;
           }
-          if ((data['phone'] as String? ?? '').isEmpty && adminPhone.isNotEmpty) {
-            updateData['phone'] = adminPhone;
-          }
-
           await _firestore
               .collection(AppConstants.usersCollection)
               .doc(primaryDoc.id)
               .set(updateData, SetOptions(merge: true));
+
+          if (adminPhone.isNotEmpty) {
+            // Başka kullanıcının private dokümanı — oturum admin değilse kurallar reddeder.
+            try {
+              await writePrivateFields(_firestore, primaryDoc.id, {'phone': adminPhone});
+            } catch (_) {}
+          }
         } else if (adminEmail.isNotEmpty) {
           // Sistemde hiç yoksa yeni Admin oluştur
           final newDocRef = _firestore.collection(AppConstants.usersCollection).doc();
@@ -154,13 +158,18 @@ class AuthService {
             hasAcceptedTerms: true,
           );
 
-          await newDocRef.set({
+          final newData = <String, dynamic>{
             ...newUser.toMap(),
             'isActive': true,
             'approvalStatus': 'approved',
             'createdAt': FieldValue.serverTimestamp(),
             'updatedAt': FieldValue.serverTimestamp(),
-          });
+          };
+          final private = takePrivateFields(newData);
+          await newDocRef.set(newData);
+          try {
+            await writePrivateFields(_firestore, newDocRef.id, private);
+          } catch (_) {}
         }
       }
     } catch (_) {}
@@ -232,10 +241,7 @@ class AuthService {
         emailVerificationRequired: !isDesignatedAdmin,
       );
 
-      await _firestore
-          .collection(AppConstants.usersCollection)
-          .doc(user.uid)
-          .set({
+      await _writeUser(user.uid, {
         ...userModel.toMap(),
         'isActive': isDesignatedAdmin || !under18,
         'isHidden': under18,
@@ -297,11 +303,7 @@ class AuthService {
             'updatedAt': FieldValue.serverTimestamp(),
           });
         }
-        final updatedDoc = await _firestore
-            .collection(AppConstants.usersCollection)
-            .doc(user.uid)
-            .get();
-        return UserModel.fromMap(updatedDoc.data()!, user.uid);
+        return await getUserData(user.uid);
       } else {
         final userModel = UserModel(
           uid: user.uid,
@@ -313,10 +315,7 @@ class AuthService {
           updatedAt: DateTime.now(),
           isActive: isDesignatedAdmin,
         );
-        await _firestore
-            .collection(AppConstants.usersCollection)
-            .doc(user.uid)
-            .set({
+        await _writeUser(user.uid, {
           ...userModel.toMap(),
           'isActive': isDesignatedAdmin,
           'approvalStatus': isDesignatedAdmin ? 'approved' : 'pending',
@@ -342,34 +341,39 @@ class AuthService {
     bool ageVerified = false,
   }) async {
     try {
-      final GoogleSignIn googleSignIn = GoogleSignIn(
-        serverClientId: '977939722051-78bh3stbhgh85rsub18ra2c0566l1gq7.apps.googleusercontent.com',
-      );
-      try {
-        await googleSignIn.signOut();
-      } catch (_) {}
-
-      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
-      if (googleUser == null) {
-        return null;
+      final credential = await user.reauthenticateWithProvider(AppleAuthProvider());
+      final code = credential.additionalUserInfo?.authorizationCode;
+      if (code != null) await _auth.revokeTokenWithAuthorizationCode(code);
+    } on FirebaseAuthException catch (e) {
+      if (e.code.contains('cancel') || (e.message ?? '').contains('1001')) {
+        throw Exception('Hesap silme iptal edildi.');
       }
+      throw _handleAuthError(e);
+    }
+  }
 
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-      final OAuthCredential credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
-
-      final UserCredential userCredential = await _auth.signInWithCredential(credential);
+  /// Sosyal giriş sonrası ortak akış: kullanıcı dokümanını bul/taşı/oluştur.
+  /// [signIn] null dönerse kullanıcı iptal etmiştir.
+  Future<UserModel?> _signInWithSocial({
+    required String label,
+    required Future<UserCredential?> Function() signIn,
+    bool isUnder18 = false,
+    String? guardianName,
+    String? guardianPhone,
+  }) async {
+    final placeholderName = '$label Kullanıcısı';
+    try {
+      final UserCredential? userCredential = await signIn();
+      if (userCredential == null) return null;
       final user = userCredential.user;
       if (user == null) {
-        throw Exception('Google ile giriş gerçekleştirilemedi.');
+        throw Exception('$label ile giriş gerçekleştirilemedi.');
       }
 
       final uid = user.uid;
-      final email = user.email ?? googleUser.email;
-      final fullName = user.displayName ?? googleUser.displayName ?? 'Google Kullanıcısı';
-      final photoUrl = user.photoURL ?? googleUser.photoUrl;
+      final email = user.email ?? '';
+      final fullName = user.displayName ?? placeholderName;
+      final photoUrl = user.photoURL;
 
       // Özel Admin listesinde bu e-posta adresi var mı?
       final designatedAdmin = designatedAdmins.firstWhere(
@@ -404,9 +408,9 @@ class AuthService {
           'updatedAt': FieldValue.serverTimestamp(),
         };
 
-        if ((data['fullName'] as String? ?? '').isEmpty || data['fullName'] == 'Google Kullanıcısı') {
+        if ((data['fullName'] as String? ?? '').isEmpty || data['fullName'] == placeholderName) {
           updateData['fullName'] = isDesignatedAdmin
-              ? (fullName.isNotEmpty && fullName != 'Google Kullanıcısı' ? fullName : designatedAdmin['name']!)
+              ? (fullName.isNotEmpty && fullName != placeholderName ? fullName : designatedAdmin['name']!)
               : fullName;
         }
 
@@ -426,15 +430,17 @@ class AuthService {
           migratedData.addAll(updateData);
           migratedData['uid'] = uid;
 
-          await _firestore.collection(AppConstants.usersCollection).doc(uid).set(migratedData);
+          // Eski dokümanın hassas alanları da yeni UID'ye taşınır
+          migratedData.addAll(await readPrivateFields(_firestore, doc.id));
+
+          await _writeUser(uid, migratedData);
+          try { await privateProfileRef(_firestore, doc.id).delete(); } catch (_) {}
           try { await _firestore.collection(AppConstants.usersCollection).doc(doc.id).delete(); } catch (_) {}
 
-          final newDoc = await _firestore.collection(AppConstants.usersCollection).doc(uid).get();
-          return UserModel.fromMap(newDoc.data()!, uid);
+          return await getUserData(uid);
         } else {
           await _firestore.collection(AppConstants.usersCollection).doc(uid).set(updateData, SetOptions(merge: true));
-          final updatedDoc = await _firestore.collection(AppConstants.usersCollection).doc(uid).get();
-          return UserModel.fromMap(updatedDoc.data()!, uid);
+          return await getUserData(uid);
         }
       } else {
         // Yeni kullanıcı — Firestore'da hiç kaydı yok.
@@ -473,13 +479,15 @@ class AuthService {
     } on GoogleAgeVerificationRequired {
       rethrow;
     } on FirebaseAuthException catch (e) {
+      // Apple sayfası kapatıldı (ASAuthorizationError 1001)
+      if (e.code.contains('cancel') || (e.message ?? '').contains('1001')) return null;
       throw _handleAuthError(e);
     } catch (e) {
       final errStr = e.toString();
       if (errStr.contains('sign_in_canceled') || errStr.contains('canceled')) {
         return null;
       }
-      throw Exception('Google ile giriş gerçekleştirilemedi: $e');
+      throw Exception('$label ile giriş gerçekleştirilemedi: $e');
     }
   }
 
@@ -679,16 +687,33 @@ class AuthService {
       throw Exception('Kullanıcı verisi bulunamadı.');
     }
 
-    return UserModel.fromMap(doc.data()!, uid);
+    final data = Map<String, dynamic>.from(doc.data()!);
+    // Eski kayıtlarda telefon/banka kök dokümanda duruyor olabilir —
+    // kullanıcı kendi oturumunda bir kez alt dokümana taşınır.
+    if (uid == _auth.currentUser?.uid) {
+      await migratePrivateFields(_firestore, uid, data);
+    }
+    data.addAll(await readPrivateFields(_firestore, uid));
+
+    return UserModel.fromMap(data, uid);
+  }
+
+  /// Kullanıcı dokümanını yazar; hassas alanlar private alt dokümana gider.
+  Future<void> _writeUser(String uid, Map<String, dynamic> data) async {
+    final private = takePrivateFields(data);
+    await _firestore.collection(AppConstants.usersCollection).doc(uid).set(data);
+    await writePrivateFields(_firestore, uid, private);
   }
 
   /// Kullanıcı verisini güncelle
   Future<void> updateUserData(String uid, Map<String, dynamic> data) async {
+    final private = takePrivateFields(data);
     data['updatedAt'] = FieldValue.serverTimestamp();
     await _firestore
         .collection(AppConstants.usersCollection)
         .doc(uid)
         .update(data);
+    await writePrivateFields(_firestore, uid, private);
   }
 
   /// Çıkış yap

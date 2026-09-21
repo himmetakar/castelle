@@ -8,6 +8,7 @@ import 'package:castelle/core/services/push_notification_service.dart';
 import 'package:castelle/core/constants/user_roles.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:castelle/core/constants/app_constants.dart';
+import 'package:castelle/core/services/private_profile_fields.dart';
 
 
 /// Castelle - Auth Provider
@@ -189,7 +190,6 @@ class AuthProvider extends ChangeNotifier {
     bool isUnder18 = false,
     String? guardianName,
     String? guardianPhone,
-    bool ageVerified = false,
   }) async {
     _status = AuthStatus.loading;
     _errorMessage = null;
@@ -201,7 +201,6 @@ class AuthProvider extends ChangeNotifier {
         isUnder18: isUnder18,
         guardianName: guardianName,
         guardianPhone: guardianPhone,
-        ageVerified: ageVerified,
       );
       if (userModel == null) {
         // Giriş kullanıcı tarafından iptal edildi
@@ -402,6 +401,10 @@ class AuthProvider extends ChangeNotifier {
       }
       final uid = firebaseUser.uid;
 
+      // 0. Apple ile giriş yapmışsa Apple token'ını iptal et (App Store 5.1.1(v)).
+      // Kullanıcı Apple onayını iptal ederse hesap silinmez.
+      await _authService.revokeAppleTokenIfNeeded();
+
       // 1. Önce kullanıcının kendi dokümanındaki tüm kişisel verileri temizle ve inaktif/pending yap
       try {
         await FirebaseFirestore.instance
@@ -411,7 +414,6 @@ class AuthProvider extends ChangeNotifier {
           'uid': uid,
           'email': firebaseUser.email ?? '',
           'fullName': 'Silinmiş Kullanıcı',
-          'phone': '',
           'role': 'actor',
           'isActive': false,
           'approvalStatus': 'pending',
@@ -422,7 +424,13 @@ class AuthProvider extends ChangeNotifier {
         debugPrint('⚠️ [DeleteAccount] Firestore set uyarısı: $e');
       }
 
-      // 2. Ardından Firestore dokümanını silmeyi dene
+      // 2. Ardından Firestore dokümanını silmeyi dene.
+      // Alt koleksiyon otomatik silinmez — hassas alanların dokümanı önce silinir.
+      try {
+        await privateProfileRef(FirebaseFirestore.instance, uid).delete();
+      } catch (e) {
+        debugPrint('⚠️ [DeleteAccount] Private doküman silme uyarısı: $e');
+      }
       try {
         await FirebaseFirestore.instance
             .collection(AppConstants.usersCollection)
