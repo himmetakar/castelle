@@ -20,6 +20,7 @@ import 'package:castelle/core/constants/user_roles.dart';
 import 'package:castelle/features/employer/providers/project_provider.dart';
 import 'package:castelle/features/actor/widgets/skills_input_widget.dart';
 import 'package:castelle/core/services/private_profile_fields.dart';
+import 'package:castelle/core/utils/turkish_text.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// Castelle - Proje Oluşturma / Düzenleme Ekranı
@@ -70,6 +71,7 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
   List<UserModel> _allModerators = [];
   List<UserModel> _filteredModerators = [];
   bool _loadingModerators = false;
+  String? _moderatorsError;
   bool get isEditing => widget.existingProject != null;
 
   List<dynamic> _locationSuggestions = [];
@@ -105,26 +107,108 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
   }
 
   Future<void> _fetchModerators() async {
-    setState(() => _loadingModerators = true);
+    setState(() {
+      _loadingModerators = true;
+      _moderatorsError = null;
+    });
     try {
+      // Sadece rol filtresi: `isActive == true` filtresi, yaş/onay akışı
+      // nedeniyle isActive=false kalan (veya alanı hiç olmayan) moderatörleri
+      // sessizce eliyordu. Pasif hesaplar listede işaretlenerek gösterilir.
       final snap = await FirebaseFirestore.instance
           .collection('users')
-          .where('role', isEqualTo: UserRole.moderator.value)
-          .where('isActive', isEqualTo: true)
+          .where('role', whereIn: [UserRole.moderator.value, UserRole.admin.value])
           .get();
-      
-      // Moderatör telefonu private alt dokümanda; yetki yoksa boş gelir.
-      final list = await Future.wait(snap.docs.map((doc) async => UserModel.fromMap({
-            ...doc.data(),
-            ...await readPrivateFields(FirebaseFirestore.instance, doc.id),
-          }, doc.id)));
+
+      final list = snap.docs
+          .map((doc) => UserModel.fromMap(doc.data(), doc.id))
+          .where((u) => u.fullName.trim().isNotEmpty)
+          .toList()
+        ..sort((a, b) {
+          // Önce moderatörler, sonra adminler; kendi içinde isme göre
+          if (a.role != b.role) return a.role == UserRole.moderator ? -1 : 1;
+          return normalizeTurkish(a.fullName).compareTo(normalizeTurkish(b.fullName));
+        });
+      if (!mounted) return;
       setState(() {
         _allModerators = list;
         _loadingModerators = false;
+        if (list.isEmpty) {
+          _moderatorsError = 'Sistemde moderatör veya admin kullanıcısı bulunamadı.';
+        }
+      });
+      // Liste yüklenmeden önce yazılmış bir arama varsa sonuçları güncelle
+      if (_coordinatorSearchController.text.trim().isNotEmpty && _coordinatorId == null) {
+        _onCoordinatorSearchChanged(_coordinatorSearchController.text);
+      }
+    } on FirebaseException catch (e) {
+      debugPrint('Error fetching moderators: ${e.code} ${e.message}');
+      if (!mounted) return;
+      setState(() {
+        _loadingModerators = false;
+        _moderatorsError = e.code == 'permission-denied'
+            ? 'Kullanıcı listesi okunamadı: yetki reddedildi (permission-denied). '
+                'Firestore kurallarının güncel olduğundan emin olun.'
+            : 'Kullanıcı listesi okunamadı (${e.code}): ${e.message ?? ''}';
       });
     } catch (e) {
       debugPrint('Error fetching moderators: $e');
-      setState(() => _loadingModerators = false);
+      if (!mounted) return;
+      setState(() {
+        _loadingModerators = false;
+        _moderatorsError = 'Kullanıcı listesi okunamadı: $e';
+      });
+    }
+  }
+
+  void _onCoordinatorSearchChanged(String val) {
+    final query = normalizeTurkish(val);
+    setState(() {
+      // Kullanıcı seçimden sonra metni değiştirirse seçim düşer
+      if (_coordinatorId != null && query != normalizeTurkish(_coordinatorName ?? '')) {
+        _coordinatorId = null;
+        _coordinatorName = null;
+        _coordinatorPhone = null;
+      }
+      if (query.isEmpty) {
+        _filteredModerators = [];
+        return;
+      }
+      _filteredModerators = _allModerators
+          .where((m) => normalizeTurkish(m.fullName).contains(query) ||
+              normalizeTurkish(m.email).contains(query))
+          .toList();
+    });
+
+    // Tam isim yazıldıysa ve tek bir eşleşme varsa otomatik ata
+    if (_coordinatorId == null) {
+      final exact = _allModerators
+          .where((m) => normalizeTurkish(m.fullName) == query)
+          .toList();
+      if (exact.length == 1) {
+        _selectCoordinator(exact.first, updateText: false);
+      }
+    }
+  }
+
+  Future<void> _selectCoordinator(UserModel mod, {bool updateText = true}) async {
+    setState(() {
+      _coordinatorId = mod.uid;
+      _coordinatorName = mod.fullName;
+      _coordinatorPhone = mod.phone;
+      if (updateText) {
+        _coordinatorSearchController.text = mod.fullName;
+        _coordinatorSearchController.selection =
+            TextSelection.collapsed(offset: mod.fullName.length);
+      }
+      _filteredModerators = [];
+    });
+    // Telefon private alt dokümanda; sadece seçilen kişi için okunur.
+    final private = await readPrivateFields(FirebaseFirestore.instance, mod.uid);
+    final phone = private['phone'] as String?;
+    if (!mounted || _coordinatorId != mod.uid) return;
+    if (phone != null && phone.isNotEmpty) {
+      setState(() => _coordinatorPhone = phone);
     }
   }
   Future<void> _sendProjectPublishNotifications(
@@ -1989,19 +2073,7 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
         TextField(
           controller: _coordinatorSearchController,
           style: const TextStyle(color: AppTheme.textPrimary),
-          onChanged: (val) {
-            setState(() {
-              if (val.trim().isEmpty) {
-                _filteredModerators = [];
-              } else {
-                _filteredModerators = _allModerators
-                    .where((m) => m.fullName
-                        .toLowerCase()
-                        .contains(val.toLowerCase()))
-                    .toList();
-              }
-            });
-          },
+          onChanged: _onCoordinatorSearchChanged,
           decoration: InputDecoration(
             hintText: 'Casting sorumlusu arayın...',
             prefixIcon: const Icon(Icons.person_search, size: 20),
@@ -2027,6 +2099,35 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
             color: AppTheme.accent,
             backgroundColor: Colors.transparent,
             minHeight: 2,
+          ),
+        ],
+        if (_moderatorsError != null) ...[
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              const Icon(Icons.error_outline, size: 16, color: AppTheme.error),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  _moderatorsError!,
+                  style: GoogleFonts.inter(fontSize: 12, color: AppTheme.error),
+                ),
+              ),
+              TextButton(
+                onPressed: _loadingModerators ? null : _fetchModerators,
+                child: const Text('Tekrar Dene'),
+              ),
+            ],
+          ),
+        ] else if (!_loadingModerators &&
+            _coordinatorId == null &&
+            _filteredModerators.isEmpty &&
+            _coordinatorSearchController.text.trim().isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Text(
+            '"${_coordinatorSearchController.text.trim()}" ile eşleşen moderatör/admin bulunamadı '
+            '(${_allModerators.length} kişi tarandı).',
+            style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textTertiary),
           ),
         ],
         if (_filteredModerators.isNotEmpty) ...[
@@ -2059,15 +2160,16 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
                     mod.email,
                     style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textTertiary),
                   ),
-                  onTap: () {
-                    setState(() {
-                      _coordinatorId = mod.uid;
-                      _coordinatorName = mod.fullName;
-                      _coordinatorPhone = mod.phone;
-                      _coordinatorSearchController.text = mod.fullName;
-                      _filteredModerators = [];
-                    });
-                  },
+                  trailing: mod.role == UserRole.admin || !mod.isActive
+                      ? Text(
+                          [
+                            if (mod.role == UserRole.admin) 'Admin',
+                            if (!mod.isActive) 'Pasif',
+                          ].join(' · '),
+                          style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textTertiary),
+                        )
+                      : null,
+                  onTap: () => _selectCoordinator(mod),
                 );
               },
             ),

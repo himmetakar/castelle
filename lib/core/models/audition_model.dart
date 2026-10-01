@@ -86,32 +86,60 @@ class AuditionModel {
   factory AuditionModel.fromMap(Map<String, dynamic> map, String id) {
     return AuditionModel(
       id: id,
-      actorId: map['actorId'] ?? '',
-      actorName: map['actorName'] ?? '',
-      projectId: map['projectId'] ?? '',
-      projectTitle: map['projectTitle'] ?? '',
-      roleName: map['roleName'] ?? '',
-      videoUrl: map['videoUrl'] ?? '',
-      thumbnailUrl: map['thumbnailUrl'],
-      note: map['note'],
-      videoDurationSec: map['videoDurationSec'],
-      videoSizeBytes: map['videoSizeBytes'],
-      originalSizeBytes: map['originalSizeBytes'],
-      status: AuditionStatus.fromString(map['status'] ?? 'submitted'),
-      reviewerNote: map['reviewerNote'],
-      reviewerId: map['reviewerId'],
-      reviewerName: map['reviewerName'],
-      requestedBudget: map['requestedBudget'] != null ? (map['requestedBudget'] as num).toDouble() : null,
-      originalBudget: map['originalBudget'] != null ? (map['originalBudget'] as num).toDouble() : null,
-      createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      reviewedAt: (map['reviewedAt'] as Timestamp?)?.toDate(),
-      optionStartDate: (map['optionStartDate'] as Timestamp?)?.toDate(),
-      optionEndDate: (map['optionEndDate'] as Timestamp?)?.toDate(),
+      actorId: _str(map['actorId']),
+      actorName: _str(map['actorName']),
+      projectId: _str(map['projectId']),
+      projectTitle: _str(map['projectTitle']),
+      roleName: _str(map['roleName']),
+      videoUrl: _str(map['videoUrl']),
+      thumbnailUrl: _strOrNull(map['thumbnailUrl']),
+      note: _strOrNull(map['note']),
+      videoDurationSec: _int(map['videoDurationSec']),
+      videoSizeBytes: _int(map['videoSizeBytes']),
+      originalSizeBytes: _int(map['originalSizeBytes']),
+      status: AuditionStatus.fromString(_strOrNull(map['status']) ?? 'submitted'),
+      reviewerNote: _strOrNull(map['reviewerNote']),
+      reviewerId: _strOrNull(map['reviewerId']),
+      reviewerName: _strOrNull(map['reviewerName']),
+      requestedBudget: _double(map['requestedBudget']),
+      originalBudget: _double(map['originalBudget']),
+      createdAt: _date(map['createdAt']) ?? DateTime.now(),
+      reviewedAt: _date(map['reviewedAt']),
+      optionStartDate: _date(map['optionStartDate']),
+      optionEndDate: _date(map['optionEndDate']),
       optionQuestions: (map['optionQuestions'] as List<dynamic>?)?.map((e) => e.toString()).toList(),
-      optionAnswers: map['optionAnswers'] != null ? Map<String, String>.from(map['optionAnswers']) : null,
-      optionAvailable: map['optionAvailable'] as bool?,
-      optionExplanation: map['optionExplanation'] as String?,
+      optionAnswers: map['optionAnswers'] is Map
+          ? (map['optionAnswers'] as Map).map((k, v) => MapEntry(k.toString(), v?.toString() ?? ''))
+          : null,
+      optionAvailable: map['optionAvailable'] is bool ? map['optionAvailable'] as bool : null,
+      optionExplanation: _strOrNull(map['optionExplanation']),
     );
+  }
+
+  // Firestore'dan gelen değerleri tipine güvenmeden çözümle. Web release
+  // derlemesinde (dart2js -O4) örtük tip kontrolleri kalktığı için yanlış
+  // tipte bir alan (ör. double süre, string tarih) modele sızıp render
+  // sırasında gri ekrana yol açabiliyordu.
+  static String _str(dynamic v) => v == null ? '' : v.toString();
+  static String? _strOrNull(dynamic v) => v?.toString();
+  static int? _int(dynamic v) {
+    if (v is num) return v.toInt();
+    if (v is String) return num.tryParse(v)?.toInt();
+    return null;
+  }
+
+  static double? _double(dynamic v) {
+    if (v is num) return v.toDouble();
+    if (v is String) return double.tryParse(v);
+    return null;
+  }
+
+  static DateTime? _date(dynamic v) {
+    if (v is Timestamp) return v.toDate();
+    if (v is DateTime) return v;
+    if (v is num) return DateTime.fromMillisecondsSinceEpoch(v.toInt());
+    if (v is String) return DateTime.tryParse(v);
+    return null;
   }
 
   Map<String, dynamic> toMap() {

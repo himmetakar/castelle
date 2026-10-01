@@ -1,6 +1,6 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:castelle/core/utils/platform_utils.dart';
 import 'package:flutter/services.dart';
 import 'package:camera/camera.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -344,7 +344,7 @@ class _VideoRecordScreenState extends State<VideoRecordScreen> with WidgetsBindi
     _flutterTts?.setVolume(1.0);
     
     // Ensure iOS plays through speaker while recording
-    if (Platform.isIOS) {
+    if (isIOSApp) {
       _flutterTts?.setIosAudioCategory(
         IosTextToSpeechAudioCategory.playAndRecord,
         [

@@ -162,6 +162,8 @@ class _AssignModeratorScreenState extends State<AssignModeratorScreen> {
           .update({
         'role': UserRole.moderator.value,
         'moderatorPermissions': permissions,
+        // Oyuncu onay akışından isActive=false kalmış olabilir; moderatör aktif olmalı
+        'isActive': true,
         'updatedAt': FieldValue.serverTimestamp(),
       });
 

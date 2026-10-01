@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:castelle/core/utils/platform_utils.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -3403,6 +3404,19 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
 
     final scaffoldMessenger = ScaffoldMessenger.of(context);
 
+    // Web'de klasör seçimi ve dart:io dosya yazma desteklenmiyor
+    if (kIsWeb) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Klasöre indirme web sürümünde desteklenmiyor. Lütfen mobil uygulamayı kullanın.'),
+            backgroundColor: AppTheme.warning,
+          ),
+        );
+      }
+      return;
+    }
+
     // 1. Hedef Klasör Seçimi
     String? selectedDir;
     try {
@@ -3422,8 +3436,8 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
     }
 
     // 2. Depolama İzni İste (Sadece Android ve iOS için)
-    if (Platform.isAndroid || Platform.isIOS) {
-      if (Platform.isAndroid) {
+    if (isAndroidApp || isIOSApp) {
+      if (isAndroidApp) {
         final status = await Permission.manageExternalStorage.request();
         if (!status.isGranted) {
           await Permission.storage.request();

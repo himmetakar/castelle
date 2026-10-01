@@ -327,7 +327,8 @@ class AuditionService {
       return list;
     } catch (e) {
       debugPrint('⚠️ [AuditionService.getAllAuditions] Error: $e');
-      return [];
+      // Hatayı yutma: AuditionListScreen hata durumunu (Tekrar Dene) göstersin
+      rethrow;
     }
   }
 

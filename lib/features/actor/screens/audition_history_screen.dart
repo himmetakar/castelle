@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:castelle/core/utils/platform_utils.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -668,7 +669,7 @@ class _AuditionHistoryScreenState extends State<AuditionHistoryScreen>
     final messenger = ScaffoldMessenger.of(context);
 
     // ── 1. İzin ──────────────────────────────────────────────────
-    if (Platform.isAndroid) {
+    if (isAndroidApp) {
       final status = await Permission.storage.request();
       if (!status.isGranted) {
         // Android 13+ scoped storage — storage izni gerekmez, doğrudan devam
@@ -682,10 +683,10 @@ class _AuditionHistoryScreenState extends State<AuditionHistoryScreen>
 
     // ── 2. Kayıt Dizini ──────────────────────────────────────────
     Directory? saveDir;
-    if (Platform.isAndroid) {
+    if (isAndroidApp) {
       // Android — Downloads/Castelle
       saveDir = Directory('/storage/emulated/0/Download/Castelle');
-    } else if (Platform.isIOS) {
+    } else if (isIOSApp) {
       // iOS — Documents/Castelle
       final docs = await getApplicationDocumentsDirectory();
       saveDir = Directory('${docs.path}/Castelle');
