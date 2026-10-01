@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -57,6 +56,7 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
   final List<String> _localImagePaths = [];
   final List<String> _uploadedImageUrls = [];
   String? _localVideoPath;
+  String? _localVideoName; // web'de yol blob URL olduğu için ad ayrıca tutulur
   String? _uploadedVideoUrl;
   bool _uploadingMedia = false;
   String? _uploadError;
@@ -536,6 +536,7 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
 
         setState(() {
           _localVideoPath = file.path;
+          _localVideoName = file.name;
         });
       }
     } catch (e) {
@@ -1582,7 +1583,8 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
                       ),
                       if (_localVideoPath != null)
                         Text(
-                          _localVideoPath!.split(Platform.pathSeparator).last,
+                          // Platform.pathSeparator web'de hata fırlatıyordu (gri ekran)
+                          _localVideoName ?? _localVideoPath!.split(RegExp(r'[/\\]')).last,
                           style: GoogleFonts.inter(
                             fontSize: 11,
                             color: AppTheme.textTertiary,

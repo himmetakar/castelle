@@ -78,6 +78,24 @@ void main() async {
     AuditionCleanupService.runCleanup().catchError((_) {});
   }
 
+  // Release'de bir widget hata verirse Flutter tüm alanı gri kutuyla
+  // kaplıyor ve sebep görünmüyordu. Bunun yerine kısa, okunur bir uyarı göster.
+  ErrorWidget.builder = (details) => Container(
+        padding: const EdgeInsets.all(12),
+        margin: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: AppTheme.error.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppTheme.error.withValues(alpha: 0.4)),
+        ),
+        child: Text(
+          'Bu bölüm görüntülenemedi.\n${details.exceptionAsString()}',
+          style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+          maxLines: 6,
+          overflow: TextOverflow.ellipsis,
+        ),
+      );
+
   runApp(const CastelleApp());
 }
 

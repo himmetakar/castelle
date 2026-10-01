@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:castelle/core/utils/platform_utils.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -657,6 +658,19 @@ class _AuditionHistoryScreenState extends State<AuditionHistoryScreen>
 
   Future<void> _downloadVideo(AuditionModel audition) async {
     final messenger = ScaffoldMessenger.of(context);
+
+    // Web'de dosya sistemi yok: videoyu yeni sekmede aç, tarayıcı indirsin
+    if (kIsWeb) {
+      final uri = Uri.tryParse(audition.videoUrl);
+      if (uri != null && audition.videoUrl.startsWith('http')) {
+        await launchUrl(uri, webOnlyWindowName: '_blank');
+      } else {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Bu video web üzerinden indirilemiyor.')),
+        );
+      }
+      return;
+    }
 
     // ── 1. İzin ──────────────────────────────────────────────────
     if (isAndroidApp) {
