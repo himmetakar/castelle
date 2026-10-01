@@ -11,6 +11,7 @@ import 'package:castelle/features/actor/providers/actor_profile_provider.dart';
 import 'package:castelle/features/chat/screens/chat_list_screen.dart';
 
 import 'package:castelle/core/constants/app_constants.dart';
+import 'package:castelle/core/utils/name_utils.dart';
 
 /// Castelle - Dashboard Header
 /// Tüm roller için ortak dashboard başlık widget'ı
@@ -223,14 +224,7 @@ class DashboardHeader extends StatelessWidget {
     );
   }
 
-  String _getInitials(String name) {
-    if (name.isEmpty) return '?';
-    final parts = name.trim().split(' ');
-    if (parts.length >= 2) {
-      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
-    }
-    return parts[0][0].toUpperCase();
-  }
+  String _getInitials(String name) => initialsOf(name);
 
   void _showLogoutDialog(BuildContext context) {
     showDialog(

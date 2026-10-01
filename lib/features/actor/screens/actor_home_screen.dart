@@ -384,296 +384,302 @@ class _ActorDashboardState extends State<_ActorDashboard> {
     final monthName = DateFormat('MMMM yyyy', 'tr_TR').format(_selectedMonth);
     final selectedDayProjects = _projects.where((p) => _doesProjectMatchDate(p, _selectedDay)).toList();
 
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceCard,
-        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        border: Border.all(color: AppTheme.border, width: 0.5),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Month Selector Header
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.chevron_left, color: AppTheme.accent),
-                  onPressed: () {
-                    setState(() {
-                      _selectedMonth = DateTime(_selectedMonth.year, _selectedMonth.month - 1, 1);
-                    });
-                  },
-                ),
-                Text(
-                  monthName,
-                  style: GoogleFonts.outfit(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.textPrimary,
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.chevron_right, color: AppTheme.accent),
-                  onPressed: () {
-                    setState(() {
-                      _selectedMonth = DateTime(_selectedMonth.year, _selectedMonth.month + 1, 1);
-                    });
-                  },
-                ),
-              ],
-            ),
+    // Web'de geniş ekranda takvim devasa olmasın diye genişliği sınırla.
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520),
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceCard,
+            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+            border: Border.all(color: AppTheme.border, width: 0.5),
           ),
-
-          // Weekday Header
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'].map((day) {
-                return SizedBox(
-                  width: 32,
-                  child: Text(
-                    day,
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.inter(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: AppTheme.textTertiary,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Month Selector Header
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.chevron_left, color: AppTheme.accent),
+                      onPressed: () {
+                        setState(() {
+                          _selectedMonth = DateTime(_selectedMonth.year, _selectedMonth.month - 1, 1);
+                        });
+                      },
                     ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-
-          // Calendar Grid
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
-            child: GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 7,
-                mainAxisSpacing: 6,
-                crossAxisSpacing: 6,
-                childAspectRatio: 1.0,
-              ),
-              itemCount: totalCells,
-              itemBuilder: (context, index) {
-                if (index < blankCells) {
-                  return const SizedBox();
-                }
-
-                final dayNum = index - blankCells + 1;
-                final date = DateTime(_selectedMonth.year, _selectedMonth.month, dayNum);
-                final isSelected = _selectedDay.year == date.year &&
-                    _selectedDay.month == date.month &&
-                    _selectedDay.day == date.day;
-
-                final dayProjects = _projects.where((p) => _doesProjectMatchDate(p, date)).toList();
-
-                return GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _selectedDay = date;
-                    });
-                  },
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: isSelected ? AppTheme.accent : Colors.transparent,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: isSelected ? Colors.transparent : AppTheme.border.withValues(alpha: 0.15),
-                        width: 0.5,
+                    Text(
+                      monthName,
+                      style: GoogleFonts.outfit(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.textPrimary,
                       ),
                     ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          '$dayNum',
-                          style: GoogleFonts.outfit(
-                            fontSize: 13,
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                            color: isSelected ? Colors.white : AppTheme.textPrimary,
-                          ),
-                        ),
-                        if (dayProjects.isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: dayProjects.take(3).map((proj) {
-                              return Container(
-                                margin: const EdgeInsets.symmetric(horizontal: 1),
-                                width: 14,
-                                height: 14,
-                                decoration: const BoxDecoration(
-                                  shape: BoxShape.circle,
-                                ),
-                                child: ClipOval(
-                                  child: proj.primaryImageUrl != null && proj.primaryImageUrl!.isNotEmpty
-                                      ? CachedNetworkImage(
-                                          imageUrl: proj.primaryImageUrl!,
-                                          fit: BoxFit.cover,
-                                          placeholder: (_, __) => Container(color: Colors.grey[300]),
-                                          errorWidget: (_, __, ___) => const Icon(Icons.movie, size: 8, color: Colors.white),
-                                        )
-                                      : Container(
-                                          color: AppTheme.accent,
-                                          child: const Icon(Icons.movie, size: 8, color: Colors.white),
-                                        ),
-                                ),
-                              );
-                            }).toList(),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-
-          // Selected Day Projects Section
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  DateFormat('dd MMMM yyyy, EEEE', 'tr_TR').format(_selectedDay),
-                  style: GoogleFonts.outfit(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.textSecondary,
-                  ),
-                ),
-                Text(
-                  '${selectedDayProjects.length} Çekim',
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    color: AppTheme.textTertiary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          if (selectedDayProjects.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 20),
-              child: Center(
-                child: Column(
-                  children: [
-                    Icon(Icons.event_note, size: 32, color: AppTheme.textTertiary.withValues(alpha: 0.4)),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Bugün için çekim planlanmadı.',
-                      style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textTertiary),
+                    IconButton(
+                      icon: const Icon(Icons.chevron_right, color: AppTheme.accent),
+                      onPressed: () {
+                        setState(() {
+                          _selectedMonth = DateTime(_selectedMonth.year, _selectedMonth.month + 1, 1);
+                        });
+                      },
                     ),
                   ],
                 ),
               ),
-            )
-          else
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-              itemCount: selectedDayProjects.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 8),
-              itemBuilder: (context, idx) {
-                final project = selectedDayProjects[idx];
-                return GestureDetector(
-                  onTap: () => _handleProjectTap(project),
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppTheme.surfaceLight,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppTheme.border, width: 0.5),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: project.primaryImageUrl != null && project.primaryImageUrl!.isNotEmpty
-                                ? CachedNetworkImage(
-                                    imageUrl: project.primaryImageUrl!,
-                                    fit: BoxFit.cover,
-                                    placeholder: (_, __) => Container(color: Colors.grey[300]),
-                                    errorWidget: (_, __, ___) => Image.asset('assets/images/ana-logo-siyah.png', fit: BoxFit.contain),
-                                  )
-                                : Container(
-                                    color: Colors.white,
-                                    child: Image.asset('assets/images/ana-logo-siyah.png', fit: BoxFit.contain),
-                                  ),
+
+              // Weekday Header
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'].map((day) {
+                    return SizedBox(
+                      width: 32,
+                      child: Text(
+                        day,
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.textTertiary,
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+
+              // Calendar Grid
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+                child: GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 7,
+                    mainAxisSpacing: 6,
+                    crossAxisSpacing: 6,
+                    childAspectRatio: 1.0,
+                  ),
+                  itemCount: totalCells,
+                  itemBuilder: (context, index) {
+                    if (index < blankCells) {
+                      return const SizedBox();
+                    }
+
+                    final dayNum = index - blankCells + 1;
+                    final date = DateTime(_selectedMonth.year, _selectedMonth.month, dayNum);
+                    final isSelected = _selectedDay.year == date.year &&
+                        _selectedDay.month == date.month &&
+                        _selectedDay.day == date.day;
+
+                    final dayProjects = _projects.where((p) => _doesProjectMatchDate(p, date)).toList();
+
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _selectedDay = date;
+                        });
+                      },
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: isSelected ? AppTheme.accent : Colors.transparent,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: isSelected ? Colors.transparent : AppTheme.border.withValues(alpha: 0.15),
+                            width: 0.5,
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                project.title,
-                                style: GoogleFonts.outfit(
-                                  fontSize: 14.5,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppTheme.textPrimary,
-                                ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              '$dayNum',
+                              style: GoogleFonts.outfit(
+                                fontSize: 13,
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                color: isSelected ? Colors.white : AppTheme.textPrimary,
                               ),
+                            ),
+                            if (dayProjects.isNotEmpty) ...[
                               const SizedBox(height: 2),
-                              Wrap(
-                                crossAxisAlignment: WrapCrossAlignment.center,
-                                spacing: 6,
-                                children: [
-                                  Text(
-                                    '${project.projectTypeLabel} · ${project.shootDate ?? "Tarih Belirtilmedi"}',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 12,
-                                      color: AppTheme.textTertiary,
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: dayProjects.take(3).map((proj) {
+                                  return Container(
+                                    margin: const EdgeInsets.symmetric(horizontal: 1),
+                                    width: 14,
+                                    height: 14,
+                                    decoration: const BoxDecoration(
+                                      shape: BoxShape.circle,
                                     ),
-                                  ),
-                                  if (project.deadline != null && DateTime.now().isAfter(project.deadline!))
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                                      decoration: BoxDecoration(
-                                        color: AppTheme.error.withValues(alpha: 0.1),
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: Text(
-                                        'Başvuru Süresi Geçti',
-                                        style: GoogleFonts.inter(
-                                          fontSize: 9.5,
-                                          fontWeight: FontWeight.bold,
-                                          color: AppTheme.error,
-                                        ),
-                                      ),
+                                    child: ClipOval(
+                                      child: proj.primaryImageUrl != null && proj.primaryImageUrl!.isNotEmpty
+                                          ? CachedNetworkImage(
+                                              imageUrl: proj.primaryImageUrl!,
+                                              fit: BoxFit.cover,
+                                              placeholder: (_, __) => Container(color: Colors.grey[300]),
+                                              errorWidget: (_, __, ___) => const Icon(Icons.movie, size: 8, color: Colors.white),
+                                            )
+                                          : Container(
+                                              color: AppTheme.accent,
+                                              child: const Icon(Icons.movie, size: 8, color: Colors.white),
+                                            ),
                                     ),
-                                ],
+                                  );
+                                }).toList(),
                               ),
                             ],
-                          ),
+                          ],
                         ),
-                        const Icon(Icons.chevron_right, size: 18, color: AppTheme.accent),
+                      ),
+                    );
+                  },
+                ),
+              ),
+
+              // Selected Day Projects Section
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      DateFormat('dd MMMM yyyy, EEEE', 'tr_TR').format(_selectedDay),
+                      style: GoogleFonts.outfit(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                    Text(
+                      '${selectedDayProjects.length} Çekim',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: AppTheme.textTertiary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              if (selectedDayProjects.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 20),
+                  child: Center(
+                    child: Column(
+                      children: [
+                        Icon(Icons.event_note, size: 32, color: AppTheme.textTertiary.withValues(alpha: 0.4)),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Bugün için çekim planlanmadı.',
+                          style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textTertiary),
+                        ),
                       ],
                     ),
                   ),
-                );
-              },
-            ),
-        ],
+                )
+              else
+                ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                  itemCount: selectedDayProjects.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (context, idx) {
+                    final project = selectedDayProjects[idx];
+                    return GestureDetector(
+                      onTap: () => _handleProjectTap(project),
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppTheme.surfaceLight,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppTheme.border, width: 0.5),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: project.primaryImageUrl != null && project.primaryImageUrl!.isNotEmpty
+                                    ? CachedNetworkImage(
+                                        imageUrl: project.primaryImageUrl!,
+                                        fit: BoxFit.cover,
+                                        placeholder: (_, __) => Container(color: Colors.grey[300]),
+                                        errorWidget: (_, __, ___) => Image.asset('assets/images/ana-logo-siyah.png', fit: BoxFit.contain),
+                                      )
+                                    : Container(
+                                        color: Colors.white,
+                                        child: Image.asset('assets/images/ana-logo-siyah.png', fit: BoxFit.contain),
+                                      ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    project.title,
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 14.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppTheme.textPrimary,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Wrap(
+                                    crossAxisAlignment: WrapCrossAlignment.center,
+                                    spacing: 6,
+                                    children: [
+                                      Text(
+                                        '${project.projectTypeLabel} · ${project.shootDate ?? "Tarih Belirtilmedi"}',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 12,
+                                          color: AppTheme.textTertiary,
+                                        ),
+                                      ),
+                                      if (project.deadline != null && DateTime.now().isAfter(project.deadline!))
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                          decoration: BoxDecoration(
+                                            color: AppTheme.error.withValues(alpha: 0.1),
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Text(
+                                            'Başvuru Süresi Geçti',
+                                            style: GoogleFonts.inter(
+                                              fontSize: 9.5,
+                                              fontWeight: FontWeight.bold,
+                                              color: AppTheme.error,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Icon(Icons.chevron_right, size: 18, color: AppTheme.accent),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }

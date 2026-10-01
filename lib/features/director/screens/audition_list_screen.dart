@@ -14,6 +14,7 @@ import 'package:castelle/core/providers/auth_provider.dart';
 import 'package:castelle/features/actor/providers/audition_provider.dart';
 import 'package:castelle/features/director/screens/audition_review_screen.dart';
 import 'package:castelle/core/services/pdf_service.dart';
+import 'package:castelle/core/utils/name_utils.dart';
 
 /// Castelle - Audition İnceleme Listesi
 /// Yönetmen ve Admin için gelen audition'ları filtrele ve incele
@@ -644,18 +645,7 @@ class _AuditionListScreenState extends State<AuditionListScreen>
     };
   }
 
-  String _getInitials(String name) {
-    // Sadece boşluklardan oluşan isimler için de güvenli davran
-    // (önceden name.trim() sonrası boş kalırsa RangeError fırlatıyordu).
-    final trimmed = name.trim();
-    if (trimmed.isEmpty) return '?';
-    final parts = trimmed.split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
-    if (parts.isEmpty) return '?';
-    if (parts.length >= 2) {
-      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
-    }
-    return parts[0][0].toUpperCase();
-  }
+  String _getInitials(String name) => initialsOf(name);
 
   String _timeAgo(DateTime dateTime) {
     final diff = DateTime.now().difference(dateTime);

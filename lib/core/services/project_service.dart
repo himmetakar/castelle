@@ -211,6 +211,29 @@ class ProjectService {
     }
   }
 
+  /// Sonuçlanan (tamamlanan) projeler — oyuncu ekranındaki "Sonuçlanan" bölümü için.
+  /// Gizli projeler hariç tutulur; `isPrivate` alanı olmayan eski kayıtlar
+  /// da gelsin diye filtre istemci tarafında yapılır. (index gerektirmez)
+  Future<List<ProjectModel>> getCompletedPublicProjects({int limit = 30}) async {
+    try {
+      final snapshot = await _firestore
+          .collection(_collection)
+          .where('status', isEqualTo: ProjectStatus.completed.value)
+          .limit(limit)
+          .get();
+
+      final list = snapshot.docs
+          .map((doc) => ProjectModel.fromMap(doc.data(), doc.id))
+          .where((p) => !p.isPrivate)
+          .toList();
+      list.sort((a, b) => (b.updatedAt ?? b.createdAt).compareTo(a.updatedAt ?? a.createdAt));
+      return list;
+    } catch (e) {
+      debugPrint('⚠️ [ProjectService.getCompletedPublicProjects] Error: $e');
+      return [];
+    }
+  }
+
   /// Proje stream'i (gerçek zamanlı) — Firestore
   Stream<ProjectModel?> streamProject(String projectId) {
     return _firestore

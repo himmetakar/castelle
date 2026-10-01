@@ -6,6 +6,7 @@ import 'package:castelle/core/theme/app_theme.dart';
 import 'package:castelle/core/constants/app_constants.dart';
 import 'package:castelle/core/constants/user_roles.dart';
 import 'package:castelle/core/models/user_model.dart';
+import 'package:castelle/core/utils/name_utils.dart';
 
 class AssignModeratorScreen extends StatefulWidget {
   const AssignModeratorScreen({super.key});
@@ -484,14 +485,7 @@ class _AssignModeratorScreenState extends State<AssignModeratorScreen> {
     );
   }
 
-  String _getInitials(String name) {
-    if (name.isEmpty) return '?';
-    final parts = name.trim().split(' ');
-    if (parts.length >= 2) {
-      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
-    }
-    return parts[0][0].toUpperCase();
-  }
+  String _getInitials(String name) => initialsOf(name);
 
   @override
   Widget build(BuildContext context) {

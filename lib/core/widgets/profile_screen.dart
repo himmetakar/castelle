@@ -6,6 +6,7 @@ import 'package:castelle/core/providers/auth_provider.dart';
 import 'package:castelle/core/theme/app_theme.dart';
 import 'package:castelle/features/actor/screens/actor_cv_view_screen.dart';
 import 'package:castelle/core/widgets/policy_dialogs.dart';
+import 'package:castelle/core/utils/name_utils.dart';
 
 /// Castelle - Ortak Profil Ekranı
 /// Tüm roller için kullanılan profil görüntüleme ve düzenleme
@@ -395,14 +396,7 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  String _getInitials(String name) {
-    if (name.isEmpty) return '?';
-    final parts = name.trim().split(' ');
-    if (parts.length >= 2) {
-      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
-    }
-    return parts[0][0].toUpperCase();
-  }
+  String _getInitials(String name) => initialsOf(name);
 
   void _showLogoutDialog(BuildContext context) {
     showDialog(

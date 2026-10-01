@@ -10,6 +10,7 @@ import 'package:castelle/core/providers/auth_provider.dart';
 import 'package:castelle/core/providers/notification_provider.dart';
 import 'package:castelle/core/services/audition_service.dart';
 import 'package:castelle/features/director/screens/audition_review_screen.dart';
+import 'package:castelle/core/utils/name_utils.dart';
 
 /// Castelle - İşveren Başvurular Ekranı
 /// Kendisine yönlendirilen audition incelemelerini gösterir.
@@ -337,14 +338,7 @@ class _EmployerAuditionsScreenState extends State<EmployerAuditionsScreen> {
     };
   }
 
-  String _initials(String name) {
-    if (name.isEmpty) return '?';
-    final parts = name.trim().split(' ');
-    if (parts.length >= 2) {
-      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
-    }
-    return parts[0][0].toUpperCase();
-  }
+  String _initials(String name) => initialsOf(name);
 
   String _timeAgo(DateTime dt) {
     final diff = DateTime.now().difference(dt);

@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:castelle/core/theme/app_theme.dart';
 import 'package:castelle/core/models/actor_profile_model.dart';
+import 'package:castelle/core/utils/name_utils.dart';
 
 /// Castelle — Paylaşımlı Oyuncu Kartı
 /// Admin, Moderatör ve Oyuncu havuzu ekranlarında kullanılır.
@@ -206,12 +207,5 @@ class ActorCard extends StatelessWidget {
     );
   }
 
-  String _initials() {
-    if (actor.fullName.isEmpty) return '?';
-    final parts = actor.fullName.trim().split(' ');
-    if (parts.length >= 2) {
-      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
-    }
-    return parts[0][0].toUpperCase();
-  }
+  String _initials() => initialsOf(actor.fullName);
 }

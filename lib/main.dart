@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:castelle/core/theme/app_theme.dart';
+import 'package:castelle/core/widgets/web_content_frame.dart';
 import 'package:castelle/core/providers/auth_provider.dart';
 import 'package:castelle/core/routing/app_router.dart';
 import 'package:castelle/features/actor/providers/actor_profile_provider.dart';
@@ -123,6 +124,7 @@ class _CastelleAppContentState extends State<CastelleAppContent> {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       routerConfig: _router,
+      builder: (context, child) => WebContentFrame(child: child ?? const SizedBox.shrink()),
     );
   }
 }

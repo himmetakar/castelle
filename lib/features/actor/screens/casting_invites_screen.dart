@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -30,6 +31,7 @@ class _CastingInvitesScreenState extends State<CastingInvitesScreen> {
   bool _loadingProject = false;
 
   List<ProjectModel> _allProjects = [];
+  List<ProjectModel> _completedProjects = [];
   bool _loadingAllProjects = false;
 
   @override
@@ -41,14 +43,21 @@ class _CastingInvitesScreenState extends State<CastingInvitesScreen> {
   Future<void> _loadAllProjects() async {
     setState(() => _loadingAllProjects = true);
     try {
-      final projects = await _projectService.getActiveProjects();
+      final results = await Future.wait([
+        _projectService.getActiveProjects(),
+        _projectService.getCompletedPublicProjects(),
+      ]);
+      if (!mounted) return;
       setState(() {
-        _allProjects = projects;
+        _allProjects = results[0];
+        _completedProjects = results[1];
         _loadingAllProjects = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _allProjects = [];
+        _completedProjects = [];
         _loadingAllProjects = false;
       });
     }
@@ -153,37 +162,99 @@ class _CastingInvitesScreenState extends State<CastingInvitesScreen> {
   }
 
   Widget _buildAllProjectsList() {
-    if (_loadingAllProjects && _allProjects.isEmpty) {
+    if (_loadingAllProjects && _allProjects.isEmpty && _completedProjects.isEmpty) {
       return const Center(child: CircularProgressIndicator(color: AppTheme.accent));
-    }
-    if (_allProjects.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.movie_creation_outlined, size: 48, color: AppTheme.textTertiary),
-            const SizedBox(height: 16),
-            Text(
-              'Aktif Proje Bulunmuyor',
-              style: GoogleFonts.outfit(fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
-            ),
-          ],
-        ),
-      );
     }
     return RefreshIndicator(
       onRefresh: _loadAllProjects,
       color: AppTheme.accent,
-      child: ListView.separated(
+      child: ListView(
         padding: const EdgeInsets.all(20),
-        itemCount: _allProjects.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 14),
-        itemBuilder: (context, index) {
-          final project = _allProjects[index];
-          return _buildProjectPreviewCard(project, index);
-        },
+        children: [
+          if (_allProjects.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 40),
+              child: Column(
+                children: [
+                  const Icon(Icons.movie_creation_outlined, size: 48, color: AppTheme.textTertiary),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Aktif Proje Bulunmuyor',
+                    style: GoogleFonts.outfit(fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
+                  ),
+                ],
+              ),
+            )
+          else
+            for (var i = 0; i < _allProjects.length; i++) ...[
+              if (i > 0) const SizedBox(height: 14),
+              _buildProjectPreviewCard(_allProjects[i], i),
+            ],
+          if (_completedProjects.isNotEmpty) ...[
+            const SizedBox(height: 28),
+            _buildCompletedSection(),
+          ],
+        ],
       ),
     );
+  }
+
+  /// Sonuçlanan projeler: sadece görsel + ad. Tıklanamaz, detay açılmaz.
+  /// Gizli projeler [ProjectService.getCompletedPublicProjects] içinde elenir.
+  Widget _buildCompletedSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.flag_outlined, size: 18, color: AppTheme.textTertiary),
+            const SizedBox(width: 6),
+            Text(
+              'Sonuçlanan',
+              style: GoogleFonts.outfit(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: AppTheme.textSecondary,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              '(${_completedProjects.length})',
+              style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textTertiary),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 12,
+          runSpacing: 14,
+          children: [
+            for (final project in _completedProjects)
+              SizedBox(
+                width: 96,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildProjectImage(project, size: 96),
+                    const SizedBox(height: 6),
+                    Text(
+                      project.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: AppTheme.textSecondary,
+                        height: 1.25,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ],
+    ).animate().fadeIn(delay: 150.ms);
   }
 
   Widget _buildProjectImage(ProjectModel project, {double size = 80.0}) {
@@ -227,6 +298,12 @@ class _CastingInvitesScreenState extends State<CastingInvitesScreen> {
           'assets/images/ana-logo-siyah.png',
           fit: BoxFit.contain,
         ),
+      );
+    } else if (kIsWeb) {
+      // Web'de yerel dosya yolu okunamaz (Image.file web'de hata verir).
+      imageWidget = Image.asset(
+        'assets/images/ana-logo-siyah.png',
+        fit: BoxFit.contain,
       );
     } else {
       imageWidget = Image.file(

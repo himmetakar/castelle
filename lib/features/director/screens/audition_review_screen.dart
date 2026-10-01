@@ -23,6 +23,7 @@ import 'package:castelle/core/services/notification_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:castelle/core/models/project_model.dart';
 import 'package:castelle/core/services/project_service.dart';
+import 'package:castelle/core/utils/name_utils.dart';
 
 /// Castelle - Audition İzleme ve İnceleme Ekranı
 /// Değerlendirme ekranı - Yönlendirme, onay, ret işlevleri
@@ -1479,14 +1480,7 @@ class _AuditionReviewScreenState extends State<AuditionReviewScreen> {
     };
   }
 
-  String _getInitials(String name) {
-    if (name.isEmpty) return '?';
-    final parts = name.trim().split(' ');
-    if (parts.length >= 2) {
-      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
-    }
-    return parts[0][0].toUpperCase();
-  }
+  String _getInitials(String name) => initialsOf(name);
 
 
   Future<bool> _submitModeratorApprovalRequest({

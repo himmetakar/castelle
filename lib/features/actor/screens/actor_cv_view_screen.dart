@@ -24,6 +24,7 @@ import 'package:castelle/features/actor/screens/actor_profile_edit_screen.dart';
 import 'package:castelle/features/chat/screens/chat_room_screen.dart';
 import 'package:castelle/features/actor/widgets/skills_input_widget.dart';
 import 'package:castelle/core/widgets/video_record_screen.dart';
+import 'package:castelle/core/utils/name_utils.dart';
 
 
 /// Castelle - Oyuncu CV / Cast Profil Görüntüleme Ekranı
@@ -3368,14 +3369,7 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
     }
   }
 
-  String _getInitials(String name) {
-    if (name.isEmpty) return '?';
-    final parts = name.trim().split(' ');
-    if (parts.length >= 2) {
-      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
-    }
-    return parts[0][0].toUpperCase();
-  }
+  String _getInitials(String name) => initialsOf(name);
 
   Future<void> _launchProjectUrl(String urlString) async {
     if (urlString.isEmpty) return;

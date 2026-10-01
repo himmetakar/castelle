@@ -67,6 +67,7 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
   String? _coordinatorPhone;
   String? _oldCoordinatorId; // moderatör değişimini takip eder
   late TextEditingController _coordinatorSearchController;
+  final FocusNode _coordinatorFocusNode = FocusNode();
   List<UserModel> _allModerators = [];
   List<UserModel> _filteredModerators = [];
   bool _loadingModerators = false;
@@ -101,31 +102,77 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
       _roles.add(_RoleFormData());
     }
     _locationController.addListener(_onLocationChanged);
+    _coordinatorFocusNode.addListener(_onCoordinatorFocusChanged);
     _fetchModerators();
   }
 
   Future<void> _fetchModerators() async {
     setState(() => _loadingModerators = true);
     try {
+      // Sadece role ile sorgula: oyuncudan moderatöre terfi eden hesaplarda
+      // `isActive` eksik/false kalabiliyor ve eski sorgu onları hiç getirmiyordu.
       final snap = await FirebaseFirestore.instance
           .collection('users')
           .where('role', isEqualTo: UserRole.moderator.value)
-          .where('isActive', isEqualTo: true)
           .get();
-      
+
+      final docs = snap.docs.where((doc) {
+        final data = doc.data();
+        return data['deletedAt'] == null && data['approvalStatus'] != 'rejected';
+      });
+
       // Moderatör telefonu private alt dokümanda; yetki yoksa boş gelir.
-      final list = await Future.wait(snap.docs.map((doc) async => UserModel.fromMap({
+      final list = await Future.wait(docs.map((doc) async => UserModel.fromMap({
             ...doc.data(),
             ...await readPrivateFields(FirebaseFirestore.instance, doc.id),
           }, doc.id)));
+      list.sort((a, b) => a.fullName.toLowerCase().compareTo(b.fullName.toLowerCase()));
+      if (!mounted) return;
       setState(() {
         _allModerators = list;
         _loadingModerators = false;
       });
+      // Kullanıcı yükleme bitmeden alana odaklandıysa listeyi şimdi göster.
+      if (_coordinatorFocusNode.hasFocus) {
+        _filterModerators(_coordinatorSearchController.text);
+      }
     } catch (e) {
       debugPrint('Error fetching moderators: $e');
-      setState(() => _loadingModerators = false);
+      if (mounted) setState(() => _loadingModerators = false);
     }
+  }
+
+  void _onCoordinatorFocusChanged() {
+    if (_coordinatorFocusNode.hasFocus) {
+      _filterModerators(_coordinatorId != null ? '' : _coordinatorSearchController.text);
+    } else {
+      // Liste öğesine tıklama işlensin diye kapatmayı bir kare ertele.
+      Future.delayed(const Duration(milliseconds: 200), () {
+        if (mounted && !_coordinatorFocusNode.hasFocus) {
+          setState(() => _filteredModerators = []);
+        }
+      });
+    }
+  }
+
+  static String _normalizeTr(String s) => s
+      .replaceAll('İ', 'i')
+      .replaceAll('I', 'ı')
+      .toLowerCase()
+      .trim();
+
+  /// Boş sorguda tüm moderatörleri, aksi halde ad/e-postada eşleşenleri gösterir.
+  void _filterModerators(String query) {
+    final q = _normalizeTr(query);
+    setState(() {
+      _filteredModerators = q.isEmpty
+          ? List.of(_allModerators)
+          : _allModerators
+              .where((m) =>
+                  _normalizeTr(m.fullName).contains(q) ||
+                  _normalizeTr(m.email).contains(q))
+              .toList();
+    });
   }
   Future<void> _sendProjectPublishNotifications(
       String projectId, String projectTitle) async {
@@ -296,6 +343,7 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
     _descController.dispose();
     _locationController.dispose();
     _coordinatorSearchController.dispose();
+    _coordinatorFocusNode.dispose();
     _shootDateController.dispose();
     _shootDurationController.dispose();
     _mediaController.dispose();
@@ -1988,20 +2036,14 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
         const SizedBox(height: 8),
         TextField(
           controller: _coordinatorSearchController,
+          focusNode: _coordinatorFocusNode,
           style: const TextStyle(color: AppTheme.textPrimary),
-          onChanged: (val) {
-            setState(() {
-              if (val.trim().isEmpty) {
-                _filteredModerators = [];
-              } else {
-                _filteredModerators = _allModerators
-                    .where((m) => m.fullName
-                        .toLowerCase()
-                        .contains(val.toLowerCase()))
-                    .toList();
-              }
-            });
+          onTap: () {
+            if (_filteredModerators.isEmpty) {
+              _filterModerators(_coordinatorId != null ? '' : _coordinatorSearchController.text);
+            }
           },
+          onChanged: _filterModerators,
           decoration: InputDecoration(
             hintText: 'Casting sorumlusu arayın...',
             prefixIcon: const Icon(Icons.person_search, size: 20),
@@ -2014,8 +2056,8 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
                         _coordinatorName = null;
                         _coordinatorPhone = null;
                         _coordinatorSearchController.clear();
-                        _filteredModerators = [];
                       });
+                      _filterModerators('');
                     },
                   )
                 : null,
@@ -2029,9 +2071,20 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
             minHeight: 2,
           ),
         ],
+        if (!_loadingModerators &&
+            _allModerators.isEmpty &&
+            _coordinatorFocusNode.hasFocus) ...[
+          const SizedBox(height: 6),
+          Text(
+            'Kayıtlı casting sorumlusu (moderatör) bulunamadı.',
+            style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textTertiary),
+          ),
+        ],
         if (_filteredModerators.isNotEmpty) ...[
           const SizedBox(height: 4),
-          Container(
+          // Listeye dokunmak arama alanının odağını düşürmesin.
+          TextFieldTapRegion(
+           child: Container(
             constraints: const BoxConstraints(maxHeight: 200),
             decoration: BoxDecoration(
               color: AppTheme.surfaceCard,
@@ -2067,10 +2120,12 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
                       _coordinatorSearchController.text = mod.fullName;
                       _filteredModerators = [];
                     });
+                    _coordinatorFocusNode.unfocus();
                   },
                 );
               },
             ),
+           ),
           ),
         ],
         if (_coordinatorId != null) ...[

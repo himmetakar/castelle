@@ -295,8 +295,10 @@ class _ActorFilterResultsScreenState extends State<ActorFilterResultsScreen> {
       controller: _scrollController,
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
       itemCount: results.length + (provider.hasMore ? 1 : 0),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
+      // Sabit 2 sütun web'de kartları devasa yapıyordu; genişliğe göre
+      // sütun sayısı artar (telefonda yine 2 sütun).
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 240,
         mainAxisSpacing: 12,
         crossAxisSpacing: 12,
         childAspectRatio: 0.72,

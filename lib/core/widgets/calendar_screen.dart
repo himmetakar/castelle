@@ -157,163 +157,174 @@ class _CalendarWidgetState extends State<CalendarWidget> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Month Header
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.chevron_left, color: AppTheme.textPrimary),
-                onPressed: () {
-                  setState(() {
-                    _selectedMonth = DateTime(
-                        _selectedMonth.year, _selectedMonth.month - 1, 1);
-                  });
-                },
-              ),
-              Text(
-                monthName,
-                style: GoogleFonts.outfit(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textPrimary,
-                ),
-              ),
-              Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.chevron_right,
-                        color: AppTheme.textPrimary),
-                    onPressed: () {
-                      setState(() {
-                        _selectedMonth = DateTime(
-                            _selectedMonth.year, _selectedMonth.month + 1, 1);
-                      });
-                    },
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.refresh,
-                        color: AppTheme.textTertiary, size: 20),
-                    onPressed: _loadEvents,
-                    tooltip: 'Yenile',
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-
-        // Weekday names
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children:
-                ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'].map((day) {
-              return SizedBox(
-                width: 36,
-                child: Text(
-                  day,
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.inter(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.textTertiary,
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-        ),
-
-        // Calendar Grid
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 7,
-            mainAxisSpacing: 6,
-            crossAxisSpacing: 6,
-            childAspectRatio: 1.0,
-          ),
-          itemCount: totalCells,
-          itemBuilder: (context, index) {
-            if (index < blankCells) return const SizedBox();
-
-            final dayNum = index - blankCells + 1;
-            final date =
-                DateTime(_selectedMonth.year, _selectedMonth.month, dayNum);
-            final isSelected = _selectedDay.year == date.year &&
-                _selectedDay.month == date.month &&
-                _selectedDay.day == date.day;
-
-            final isToday = DateTime.now().year == date.year &&
-                DateTime.now().month == date.month &&
-                DateTime.now().day == date.day;
-
-            final dayEvents = _getEventsForDate(date);
-
-            return GestureDetector(
-              onTap: () => setState(() => _selectedDay = date),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? AppTheme.accent
-                      : isToday
-                          ? AppTheme.accent.withValues(alpha: 0.1)
-                          : Colors.transparent,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: isSelected
-                        ? Colors.transparent
-                        : isToday
-                            ? AppTheme.accent.withValues(alpha: 0.4)
-                            : AppTheme.border.withValues(alpha: 0.2),
-                    width: 0.8,
-                  ),
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+        // Web'de geniş ekranda takvim devasa olmasın diye genişliği sınırla.
+        Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+              // Month Header
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
+                    IconButton(
+                      icon: const Icon(Icons.chevron_left, color: AppTheme.textPrimary),
+                      onPressed: () {
+                        setState(() {
+                          _selectedMonth = DateTime(
+                              _selectedMonth.year, _selectedMonth.month - 1, 1);
+                        });
+                      },
+                    ),
                     Text(
-                      '$dayNum',
+                      monthName,
                       style: GoogleFonts.outfit(
-                        fontSize: 13,
-                        fontWeight:
-                            isSelected || isToday ? FontWeight.bold : FontWeight.normal,
-                        color: isSelected
-                            ? Colors.white
-                            : isToday
-                                ? AppTheme.accent
-                                : AppTheme.textPrimary,
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.textPrimary,
                       ),
                     ),
-                    if (dayEvents.isNotEmpty) ...[
-                      const SizedBox(height: 3),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: dayEvents.take(3).map((event) {
-                          return Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 1),
-                            width: 4,
-                            height: 4,
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? Colors.white
-                                  : _getEventColor(event['eventType'] ?? ''),
-                              shape: BoxShape.circle,
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                    ],
+                    Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.chevron_right,
+                              color: AppTheme.textPrimary),
+                          onPressed: () {
+                            setState(() {
+                              _selectedMonth = DateTime(
+                                  _selectedMonth.year, _selectedMonth.month + 1, 1);
+                            });
+                          },
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.refresh,
+                              color: AppTheme.textTertiary, size: 20),
+                          onPressed: _loadEvents,
+                          tooltip: 'Yenile',
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
-            );
-          },
+
+              // Weekday names
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children:
+                      ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'].map((day) {
+                    return SizedBox(
+                      width: 36,
+                      child: Text(
+                        day,
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.textTertiary,
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+
+              // Calendar Grid
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 7,
+                  mainAxisSpacing: 6,
+                  crossAxisSpacing: 6,
+                  childAspectRatio: 1.0,
+                ),
+                itemCount: totalCells,
+                itemBuilder: (context, index) {
+                  if (index < blankCells) return const SizedBox();
+
+                  final dayNum = index - blankCells + 1;
+                  final date =
+                      DateTime(_selectedMonth.year, _selectedMonth.month, dayNum);
+                  final isSelected = _selectedDay.year == date.year &&
+                      _selectedDay.month == date.month &&
+                      _selectedDay.day == date.day;
+
+                  final isToday = DateTime.now().year == date.year &&
+                      DateTime.now().month == date.month &&
+                      DateTime.now().day == date.day;
+
+                  final dayEvents = _getEventsForDate(date);
+
+                  return GestureDetector(
+                    onTap: () => setState(() => _selectedDay = date),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? AppTheme.accent
+                            : isToday
+                                ? AppTheme.accent.withValues(alpha: 0.1)
+                                : Colors.transparent,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: isSelected
+                              ? Colors.transparent
+                              : isToday
+                                  ? AppTheme.accent.withValues(alpha: 0.4)
+                                  : AppTheme.border.withValues(alpha: 0.2),
+                          width: 0.8,
+                        ),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            '$dayNum',
+                            style: GoogleFonts.outfit(
+                              fontSize: 13,
+                              fontWeight:
+                                  isSelected || isToday ? FontWeight.bold : FontWeight.normal,
+                              color: isSelected
+                                  ? Colors.white
+                                  : isToday
+                                      ? AppTheme.accent
+                                      : AppTheme.textPrimary,
+                            ),
+                          ),
+                          if (dayEvents.isNotEmpty) ...[
+                            const SizedBox(height: 3),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: dayEvents.take(3).map((event) {
+                                return Container(
+                                  margin: const EdgeInsets.symmetric(horizontal: 1),
+                                  width: 4,
+                                  height: 4,
+                                  decoration: BoxDecoration(
+                                    color: isSelected
+                                        ? Colors.white
+                                        : _getEventColor(event['eventType'] ?? ''),
+                                    shape: BoxShape.circle,
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+              ],
+            ),
+          ),
         ),
 
         const SizedBox(height: 16),

@@ -12,6 +12,7 @@ import 'package:castelle/core/providers/auth_provider.dart';
 import 'package:castelle/core/services/private_profile_fields.dart';
 import 'package:castelle/features/admin/screens/actor_filter_screen.dart';
 import 'package:castelle/features/admin/screens/actor_detail_screen.dart';
+import 'package:castelle/core/utils/name_utils.dart';
 
 /// Admin Kullanıcı Yönetim Ekranı
 /// Tüm kullanıcıları listeler, rol ataması ve aktif/pasif yönetimi yapar
@@ -868,14 +869,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     }
   }
 
-  String _getInitials(String name) {
-    if (name.isEmpty) return '?';
-    final parts = name.trim().split(' ');
-    if (parts.length >= 2) {
-      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
-    }
-    return parts[0][0].toUpperCase();
-  }
+  String _getInitials(String name) => initialsOf(name);
 
   IconData _getRoleIcon(UserRole role) {
     return switch (role) {
