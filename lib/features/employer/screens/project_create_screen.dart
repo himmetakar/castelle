@@ -21,6 +21,8 @@ import 'package:castelle/features/employer/providers/project_provider.dart';
 import 'package:castelle/features/actor/widgets/skills_input_widget.dart';
 import 'package:castelle/core/services/private_profile_fields.dart';
 import 'package:castelle/core/utils/turkish_text.dart';
+import 'package:castelle/core/services/media_upload.dart';
+import 'package:castelle/core/utils/platform_utils.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// Castelle - Proje Oluşturma / Düzenleme Ekranı
@@ -57,6 +59,7 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
   String? _localVideoPath;
   String? _uploadedVideoUrl;
   bool _uploadingMedia = false;
+  String? _uploadError;
   double _uploadProgress = 0.0;
 
   // Primary image
@@ -403,9 +406,9 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
       for (int i = 0; i < _localImagePaths.length; i++) {
         final path = _localImagePaths[i];
         final ref = storage.ref().child('projects/$projectId/gallery/image_${DateTime.now().millisecondsSinceEpoch}_$i.jpg');
-        final uploadTask = ref.putFile(File(path));
-        
-        await uploadTask.whenComplete(() {});
+        final uploadTask = await startUpload(ref, path,
+            metadata: SettableMetadata(contentType: 'image/jpeg'));
+        await uploadTask;
         final url = await ref.getDownloadURL();
         _uploadedImageUrls.add(url);
 
@@ -426,9 +429,9 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
       // 2. Upload local video
       if (_localVideoPath != null) {
         final ref = storage.ref().child('projects/$projectId/sample_video.mp4');
-        final uploadTask = ref.putFile(File(_localVideoPath!));
-        
-        await uploadTask.whenComplete(() {});
+        final uploadTask = await startUpload(ref, _localVideoPath!,
+            metadata: SettableMetadata(contentType: 'video/mp4'));
+        await uploadTask;
         final url = await ref.getDownloadURL();
         _uploadedVideoUrl = url;
         _localVideoPath = null;
@@ -441,7 +444,10 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
       return true;
     } catch (e) {
       debugPrint('Error uploading project media: $e');
-      setState(() => _uploadingMedia = false);
+      setState(() {
+        _uploadingMedia = false;
+        _uploadError = e is FirebaseException ? '${e.code}: ${e.message ?? ''}' : '$e';
+      });
       return false;
     }
   }
@@ -612,7 +618,11 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
       if (!ok) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Dosya yüklemeleri başarısız oldu.'), backgroundColor: AppTheme.error),
+            SnackBar(
+              content: Text('Dosya yüklemeleri başarısız oldu'
+                  '${_uploadError != null ? ': $_uploadError' : '.'}'),
+              backgroundColor: AppTheme.error,
+            ),
           );
         }
         return;
@@ -1397,7 +1407,7 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
                         children: [
                           isUploaded
                               ? Image.network(pathOrUrl, fit: BoxFit.cover)
-                              : Image.file(File(pathOrUrl), fit: BoxFit.cover),
+                              : localImage(pathOrUrl),
                           // Birincil Badge
                           if (isPrimary)
                             Positioned(
@@ -2338,13 +2348,14 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['mp3', 'm4a', 'wav', 'aac', 'ogg'],
+      withData: kIsWeb, // web'de dosya yolu yok, baytlar gerekir
     );
 
     if (result == null || result.files.isEmpty) return;
-    final filePath = result.files.single.path;
-    if (filePath == null) return;
-
-    final file = File(filePath);
+    final picked = result.files.single;
+    // Web'de PlatformFile.path erişimi hata fırlatır
+    final filePath = kIsWeb ? '' : picked.path;
+    if (filePath == null || (kIsWeb && picked.bytes == null)) return;
 
     // Yükleniyor göster
     messenger.showSnackBar(
@@ -2365,9 +2376,14 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
       ),
     );
     try {
-      final uploadTask = FirebaseStorage.instance
-          .ref('projects/$_projectId/gallery/audio_${DateTime.now().millisecondsSinceEpoch}_${result.files.single.name}')
-          .putFile(file);
+      final ext = fileExtension(filePath, name: picked.name, fallback: 'mp3');
+      final uploadTask = await startUpload(
+        FirebaseStorage.instance.ref(
+            'projects/$_projectId/gallery/audio_${DateTime.now().millisecondsSinceEpoch}_${picked.name}'),
+        filePath,
+        bytes: picked.bytes,
+        metadata: SettableMetadata(contentType: ext == 'mp3' ? 'audio/mpeg' : 'audio/$ext'),
+      );
       final snapshot = await uploadTask;
       final downloadUrl = await snapshot.ref.getDownloadURL();
 

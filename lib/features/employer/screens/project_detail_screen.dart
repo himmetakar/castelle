@@ -1,5 +1,5 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:castelle/core/services/media_upload.dart';
 import 'package:castelle/core/widgets/web_frame.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -1633,8 +1633,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
           ),
         );
       } else {
-        imageWidget = Image.file(
-          File(_project.primaryImageUrl!),
+        imageWidget = localImage(
+          _project.primaryImageUrl!,
           fit: BoxFit.contain,
           errorBuilder: (_, _, _) => Image.asset(
             'assets/images/ana-logo-siyah.png',

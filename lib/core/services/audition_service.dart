@@ -1,7 +1,8 @@
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:castelle/core/services/media_upload.dart';
 import 'package:castelle/core/models/audition_model.dart';
 import 'package:castelle/core/models/notification_model.dart';
 import 'package:castelle/core/services/notification_service.dart';
@@ -17,7 +18,7 @@ class AuditionService {
 
   /// Video'yu Firebase Storage SDK ile güvenli şekilde yükle ve URL döndür
   Future<String> uploadVideo({
-    required File videoFile,
+    required XFile videoFile,
     required String actorId,
     required String projectId,
     required Function(double) onProgress,
@@ -31,7 +32,7 @@ class AuditionService {
     try {
       final ref = FirebaseStorage.instance.ref().child(storagePath);
       final metadata = SettableMetadata(contentType: 'video/mp4');
-      final uploadTask = ref.putFile(videoFile, metadata);
+      final uploadTask = await startUpload(ref, videoFile.path, metadata: metadata);
 
       // İlerleme takibi
       uploadTask.snapshotEvents.listen(

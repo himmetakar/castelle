@@ -1,5 +1,5 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:castelle/core/utils/video_utils.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -38,7 +38,7 @@ class _AuditionSubmitScreenState extends State<AuditionSubmitScreen> {
   final _budgetController = TextEditingController();
   final _picker = ImagePicker();
 
-  File? _selectedVideo;
+  XFile? _selectedVideo;
   VideoPlayerController? _videoController;
   bool _isVideoReady = false;
   int? _fileSizeBytes;
@@ -71,7 +71,7 @@ class _AuditionSubmitScreenState extends State<AuditionSubmitScreen> {
 
     debugPrint('📹 [image_picker] xFile.path: "${xFile.path}"');
 
-    final file = File(xFile.path);
+    final file = xFile;
     final size = await file.length();
     debugPrint('📹 [image_picker] Dosya boyutu: ${(size / 1024 / 1024).toStringAsFixed(2)} MB');
 
@@ -84,7 +84,7 @@ class _AuditionSubmitScreenState extends State<AuditionSubmitScreen> {
     // Video önizleme başlat – çift yöntem
     _videoController?.dispose();
     try {
-      _videoController = VideoPlayerController.file(file);
+      _videoController = localVideoController(file.path);
       await _videoController!.initialize();
       setState(() => _isVideoReady = true);
       debugPrint('✅ [Preview] file() yöntemi başarılı.');
@@ -118,7 +118,7 @@ class _AuditionSubmitScreenState extends State<AuditionSubmitScreen> {
 
     if (videoPath == null || videoPath.isEmpty) return;
 
-    final file = File(videoPath);
+    final file = XFile(videoPath);
     final size = await file.length();
 
     setState(() {
@@ -129,7 +129,7 @@ class _AuditionSubmitScreenState extends State<AuditionSubmitScreen> {
 
     _videoController?.dispose();
     try {
-      _videoController = VideoPlayerController.file(file);
+      _videoController = localVideoController(file.path);
       await _videoController!.initialize();
       setState(() => _isVideoReady = true);
     } catch (e) {

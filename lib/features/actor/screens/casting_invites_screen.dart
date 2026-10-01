@@ -1,5 +1,5 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:castelle/core/services/media_upload.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -330,8 +330,8 @@ class _CastingInvitesScreenState extends State<CastingInvitesScreen> {
         ),
       );
     } else {
-      imageWidget = Image.file(
-        File(primaryImageUrl),
+      imageWidget = localImage(
+        primaryImageUrl,
         fit: BoxFit.cover,
         errorBuilder: (_, _, _) => Image.asset(
           'assets/images/ana-logo-siyah.png',
@@ -584,8 +584,8 @@ class _CastingInvitesScreenState extends State<CastingInvitesScreen> {
               ),
             );
           } else {
-            imageWidget = Image.file(
-              File(primaryImageUrl),
+            imageWidget = localImage(
+              primaryImageUrl,
               fit: BoxFit.contain,
               errorBuilder: (_, _, _) => Image.asset(
                 'assets/images/ana-logo-siyah.png',

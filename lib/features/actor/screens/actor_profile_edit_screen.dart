@@ -1,5 +1,5 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:castelle/core/services/media_upload.dart';
 import 'package:castelle/core/widgets/web_frame.dart';
 import 'package:castelle/core/utils/video_utils.dart';
 import 'package:castelle/core/utils/platform_utils.dart';
@@ -466,7 +466,7 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
       final authProvider = context.read<AuthProvider>();
       final uid = authProvider.user?.uid;
       final provider = context.read<ActorProfileProvider>();
-      final success = await provider.uploadProfilePhoto(File(xFile.path), fallbackUid: uid);
+      final success = await provider.uploadProfilePhoto(xFile, fallbackUid: uid);
       if (mounted && success) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Profil resmi yüklendi.'), backgroundColor: AppTheme.success),
@@ -505,7 +505,7 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
       final authProvider = context.read<AuthProvider>();
       final uid = authProvider.user?.uid;
       
-      final fileList = files.map((x) => File(x.path)).toList();
+      final fileList = files;
       final success = await provider.uploadMultipleGalleryPhotos(fileList, fallbackUid: uid);
       
       if (mounted) {
@@ -636,7 +636,7 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
       final authProvider = context.read<AuthProvider>();
       final uid = authProvider.user?.uid;
       final provider = context.read<ActorProfileProvider>();
-      final success = await provider.uploadAndCompressProfileVideo(File(videoPath), videoKey, fallbackUid: uid);
+      final success = await provider.uploadAndCompressProfileVideo(XFile(videoPath), videoKey, fallbackUid: uid);
 
       if (!mounted) return;
       setState(() => _processingVideoKey = null);
@@ -1355,7 +1355,7 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
               child: profile?.profilePhotoUrl != null
                   ? (profile!.profilePhotoUrl!.startsWith('http')
                       ? Image.network(profile.profilePhotoUrl!, fit: BoxFit.cover)
-                      : Image.file(File(profile.profilePhotoUrl!), fit: BoxFit.cover))
+                      : localImage(profile.profilePhotoUrl!, fit: BoxFit.cover))
                   : Container(
                       color: AppTheme.surfaceLight,
                       child: const Icon(Icons.person, size: 48, color: AppTheme.textTertiary),
@@ -1478,7 +1478,7 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
                     borderRadius: BorderRadius.circular(8),
                     child: url.startsWith('http')
                         ? Image.network(url, fit: BoxFit.cover)
-                        : Image.file(File(url), fit: BoxFit.cover),
+                        : localImage(url, fit: BoxFit.cover),
                   ),
                   Positioned(
                     top: 2,

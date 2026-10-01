@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:castelle/core/services/media_upload.dart';
 import 'package:castelle/core/utils/platform_utils.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
@@ -1379,8 +1380,8 @@ class _AuditionReviewScreenState extends State<AuditionReviewScreen> {
                         fit: BoxFit.cover,
                         errorBuilder: (_, _, _) => _buildFallbackPhoto(photo),
                       )
-                    : Image.file(
-                        File(photo),
+                    : localImage(
+                        photo,
                         fit: BoxFit.cover,
                         errorBuilder: (_, _, _) => _buildFallbackPhoto(photo),
                       ),

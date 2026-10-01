@@ -1,7 +1,8 @@
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:castelle/core/services/media_upload.dart';
 import 'package:castelle/core/constants/app_constants.dart';
 import 'package:castelle/core/models/actor_profile_model.dart';
 import 'package:castelle/core/models/notification_model.dart';
@@ -22,14 +23,16 @@ class ActorProfileService {
 
   /// Profil dosyalarını (Fotoğraf/Video) Firebase Storage'a yükle.
   /// Firebase Storage SDK kullanır → auth token otomatik eklenir.
+  /// [file] mobilde disk yolu, web'de blob URL taşır; ikisi de desteklenir.
   Future<String> uploadProfileMedia({
-    required File file,
+    required XFile file,
     required String uid,
     required String type,   // 'photo' veya 'video'
     required String key,    // 'profile_photo', 'gallery_0', 'intro_video' vb.
     Function(double)? onProgress,
   }) async {
-    final extension = file.path.split('.').last.toLowerCase();
+    final extension = fileExtension(file.path,
+        name: file.name, fallback: type == 'video' ? 'mp4' : 'jpg');
     final fileName = '${uid}_${key}_${DateTime.now().millisecondsSinceEpoch}.$extension';
     final storagePath = 'profiles/$uid/$type/$fileName';
 
@@ -42,7 +45,7 @@ class ActorProfileService {
       final ref = _storage.ref().child(storagePath);
 
       final metadata = SettableMetadata(contentType: mimeType);
-      final uploadTask = ref.putFile(file, metadata);
+      final uploadTask = await startUpload(ref, file.path, metadata: metadata);
 
       // İlerleme takibi
       if (onProgress != null) {

@@ -22,16 +22,13 @@ class WebFrame extends StatelessWidget {
     final mq = MediaQuery.of(context);
     if (mq.size.width <= maxWidth) return child;
 
+    // Yan boşluklar uygulama zemini ile aynı renkte; sütun ayrı görünmez
     return ColoredBox(
-      color: AppTheme.border,
+      color: AppTheme.surface,
       child: Center(
-        child: Container(
+        child: SizedBox(
           width: maxWidth,
           height: double.infinity,
-          decoration: BoxDecoration(
-            color: AppTheme.surface,
-            boxShadow: AppTheme.shadowMd,
-          ),
           child: MediaQuery(
             data: mq.copyWith(size: Size(maxWidth, mq.size.height)),
             child: ClipRect(child: child),

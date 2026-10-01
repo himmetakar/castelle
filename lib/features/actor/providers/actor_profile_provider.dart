@@ -2,7 +2,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:video_compress/video_compress.dart';
-import 'package:video_player/video_player.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:castelle/core/utils/platform_utils.dart';
+import 'package:castelle/core/utils/video_utils.dart';
 import 'package:castelle/core/models/actor_profile_model.dart';
 import 'package:castelle/core/services/actor_profile_service.dart';
 
@@ -139,7 +141,7 @@ class ActorProfileProvider extends ChangeNotifier {
   }
 
   /// Profil fotoğrafı yükle
-  Future<bool> uploadProfilePhoto(File file, {String? fallbackUid}) async {
+  Future<bool> uploadProfilePhoto(XFile file, {String? fallbackUid}) async {
     if (_profile == null) {
       if (fallbackUid != null) {
         _profile = ActorProfileModel(uid: fallbackUid, fullName: '', email: '', phone: '');
@@ -168,7 +170,7 @@ class ActorProfileProvider extends ChangeNotifier {
   }
 
   /// Portfolyo galerisine fotoğraf yükle
-  Future<bool> uploadGalleryPhoto(File file, int index, {String? fallbackUid}) async {
+  Future<bool> uploadGalleryPhoto(XFile file, int index, {String? fallbackUid}) async {
     if (_profile == null) {
       if (fallbackUid != null) {
         _profile = ActorProfileModel(uid: fallbackUid, fullName: '', email: '', phone: '');
@@ -203,7 +205,7 @@ class ActorProfileProvider extends ChangeNotifier {
   }
 
   /// Portfolyo galerisine birden fazla fotoğraf yükle
-  Future<bool> uploadMultipleGalleryPhotos(List<File> files, {String? fallbackUid}) async {
+  Future<bool> uploadMultipleGalleryPhotos(List<XFile> files, {String? fallbackUid}) async {
     if (_profile == null) {
       if (fallbackUid != null) {
         _profile = ActorProfileModel(uid: fallbackUid, fullName: '', email: '', phone: '');
@@ -267,7 +269,7 @@ class ActorProfileProvider extends ChangeNotifier {
   }
 
   /// Profil videosu (Tanıtım, Showreel, Performans, Mimik) sıkıştır ve yükle
-  Future<bool> uploadAndCompressProfileVideo(File videoFile, String videoKey, {String? fallbackUid}) async {
+  Future<bool> uploadAndCompressProfileVideo(XFile videoFile, String videoKey, {String? fallbackUid}) async {
     if (_profile == null) {
       if (fallbackUid != null) {
         _profile = ActorProfileModel(uid: fallbackUid, fullName: '', email: '', phone: '');
@@ -280,7 +282,7 @@ class ActorProfileProvider extends ChangeNotifier {
      // Video süre kontrolü (Showreel: 4dk, Performans: 2dk, Tanıtım: 30s, Mimik: Limitsiz/50s)
      int durationSec = 0;
      try {
-       final ctrl = VideoPlayerController.file(videoFile);
+       final ctrl = localVideoController(videoFile.path);
        await ctrl.initialize();
        durationSec = ctrl.value.duration.inSeconds;
        await ctrl.dispose();
@@ -316,10 +318,60 @@ class ActorProfileProvider extends ChangeNotifier {
     _compressProgress = 0.0;
     notifyListeners();
 
-    File persistentFile;
     final fileName = '${_profile!.uid}_${videoKey}_${DateTime.now().millisecondsSinceEpoch}.mp4';
 
     try {
+      // Web: sıkıştırma (video_compress) ve yerel kopya yok; dosya doğrudan yüklenir
+      final XFile uploadFile =
+          kIsWeb ? videoFile : XFile((await _compressAndPersist(videoFile, fileName)).path);
+
+      _compressProgress = 1.0;
+      _isCompressing = false;
+      _isUploading = true;
+      _uploadProgress = 0.0;
+      notifyListeners();
+
+      final downloadUrl = await _service.uploadProfileMedia(
+        file: uploadFile,
+        uid: _profile!.uid,
+        type: 'video',
+        key: videoKey,
+        onProgress: (progress) {
+          _uploadProgress = progress;
+          notifyListeners();
+        },
+      );
+
+      _isUploading = false;
+      notifyListeners();
+
+      ActorProfileModel updatedProfile;
+      if (videoKey == 'introVideo') {
+        updatedProfile = _profile!.copyWith(introVideoUrl: downloadUrl);
+      } else if (videoKey == 'showreelVideo' || videoKey == 'showreel') {
+        updatedProfile = _profile!.copyWith(showreelVideoUrl: downloadUrl);
+      } else if (videoKey == 'performanceVideo') {
+        updatedProfile = _profile!.copyWith(performanceVideoUrl: downloadUrl);
+      } else if (videoKey == 'expressionVideo') {
+        updatedProfile = _profile!.copyWith(expressionVideoUrl: downloadUrl);
+      } else {
+        return false;
+      }
+
+      return await saveProfile(updatedProfile);
+    } catch (e) {
+      _isCompressing = false;
+      _isUploading = false;
+      _errorMessage = 'İşlem hatası: $e';
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Mobil: videoyu sıkıştırıp uygulama klasörüne kalıcı kopyalar.
+  Future<File> _compressAndPersist(XFile videoFile, String fileName) async {
+    File persistentFile;
+    {
       final appDir = await getApplicationDocumentsDirectory();
       final videosDir = Directory('${appDir.path}/profile_videos');
       if (!await videosDir.exists()) {
@@ -369,54 +421,14 @@ class ActorProfileProvider extends ChangeNotifier {
           notifyListeners();
           await Future.delayed(const Duration(milliseconds: 50));
         }
-        persistentFile = await videoFile.copy(destPath);
+        persistentFile = await File(videoFile.path).copy(destPath);
       }
 
       try {
         await VideoCompress.deleteAllCache();
       } catch (_) {}
-
-      _compressProgress = 1.0;
-      _isCompressing = false;
-      _isUploading = true;
-      _uploadProgress = 0.0;
-      notifyListeners();
-
-      final downloadUrl = await _service.uploadProfileMedia(
-        file: persistentFile,
-        uid: _profile!.uid,
-        type: 'video',
-        key: videoKey,
-        onProgress: (progress) {
-          _uploadProgress = progress;
-          notifyListeners();
-        },
-      );
-
-      _isUploading = false;
-      notifyListeners();
-
-      ActorProfileModel updatedProfile;
-      if (videoKey == 'introVideo') {
-        updatedProfile = _profile!.copyWith(introVideoUrl: downloadUrl);
-      } else if (videoKey == 'showreelVideo' || videoKey == 'showreel') {
-        updatedProfile = _profile!.copyWith(showreelVideoUrl: downloadUrl);
-      } else if (videoKey == 'performanceVideo') {
-        updatedProfile = _profile!.copyWith(performanceVideoUrl: downloadUrl);
-      } else if (videoKey == 'expressionVideo') {
-        updatedProfile = _profile!.copyWith(expressionVideoUrl: downloadUrl);
-      } else {
-        return false;
-      }
-
-      return await saveProfile(updatedProfile);
-    } catch (e) {
-      _isCompressing = false;
-      _isUploading = false;
-      _errorMessage = 'İşlem hatası: $e';
-      notifyListeners();
-      return false;
     }
+    return persistentFile;
   }
 
   /// Profil videosunu sil (Tanıtım, Showreel, Performans, Mimik)

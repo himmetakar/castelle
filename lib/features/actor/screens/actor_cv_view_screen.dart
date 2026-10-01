@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:castelle/core/services/media_upload.dart';
 import 'package:castelle/core/widgets/web_frame.dart';
 import 'package:castelle/core/utils/video_utils.dart';
 import 'package:castelle/core/utils/platform_utils.dart';
@@ -262,7 +263,7 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
     try {
       final xFile = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
       if (xFile == null) return;
-      await provider.uploadProfilePhoto(File(xFile.path));
+      await provider.uploadProfilePhoto(xFile);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Profil resmi güncellendi.'), backgroundColor: AppTheme.success),
@@ -286,7 +287,7 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
       }
       final files = await _picker.pickMultiImage(imageQuality: 85);
       if (files.isEmpty) return;
-      final fileList = files.map((x) => File(x.path)).toList();
+      final fileList = files;
       await provider.uploadMultipleGalleryPhotos(fileList);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -436,7 +437,7 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
       }
 
       setState(() => _processingVideoKey = videoKey);
-      final success = await provider.uploadAndCompressProfileVideo(File(videoPath), videoKey);
+      final success = await provider.uploadAndCompressProfileVideo(XFile(videoPath), videoKey);
       setState(() => _processingVideoKey = null);
       if (success) {
         if (!mounted) return;
@@ -766,7 +767,7 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
                     child: profile.profilePhotoUrl != null
                         ? (profile.profilePhotoUrl!.startsWith('http')
                             ? Image.network(profile.profilePhotoUrl!, fit: BoxFit.cover)
-                            : Image.file(File(profile.profilePhotoUrl!), fit: BoxFit.cover))
+                            : localImage(profile.profilePhotoUrl!, fit: BoxFit.cover))
                         : Container(
                             color: AppTheme.surfaceLight,
                             child: Center(
@@ -940,7 +941,7 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
                     child: profile.profilePhotoUrl != null
                         ? (profile.profilePhotoUrl!.startsWith('http')
                             ? Image.network(profile.profilePhotoUrl!, fit: BoxFit.cover)
-                            : Image.file(File(profile.profilePhotoUrl!), fit: BoxFit.cover))
+                            : localImage(profile.profilePhotoUrl!, fit: BoxFit.cover))
                         : Container(
                             color: AppTheme.surfaceLight,
                             child: Center(
@@ -1144,7 +1145,7 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
                           borderRadius: BorderRadius.circular(8),
                           child: url.startsWith('http')
                               ? Image.network(url, fit: BoxFit.cover)
-                              : Image.file(File(url), fit: BoxFit.cover),
+                              : localImage(url, fit: BoxFit.cover),
                         ),
                       ),
                       Positioned(
@@ -1357,8 +1358,8 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
               fit: BoxFit.cover,
               errorBuilder: (_, _, _) => Container(color: AppTheme.surfaceLight, child: const Icon(Icons.broken_image)),
             )
-          : Image.file(
-              File(url),
+          : localImage(
+              url,
               width: width,
               height: height,
               fit: BoxFit.cover,
@@ -1386,7 +1387,7 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
             InteractiveViewer(
               child: url.startsWith('http')
                   ? Image.network(url)
-                  : Image.file(File(url)),
+                  : localImage(url),
             ),
             Positioned(
               top: 40,
