@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:castelle/core/widgets/web_frame.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -946,7 +947,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
         selectedIds.length == unrequestedCandidates.length;
 
     // Eşleşme yüzdesi rozeti (Örn: %96 Uyumluluk)
-    Widget _matchBadge(ActorProfileModel actor) {
+    Widget matchBadge(ActorProfileModel actor) {
       final percent = _calculateCompatibilityPercentage(actor, role);
       final isHighMatch = percent >= 90;
       return GestureDetector(
@@ -1239,7 +1240,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                                                 horizontal: 8, vertical: 3),
                                             decoration: BoxDecoration(
                                               color: AppTheme.primary
-                                                  .withOpacity(0.1),
+                                                  .withValues(alpha: 0.1),
                                               borderRadius: BorderRadius.circular(
                                                   AppTheme.radiusSm),
                                             ),
@@ -1254,10 +1255,10 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                                           ),
                                         ] else ...[
                                           // Yetenek eşleşme rozeti
-                                          if (_matchBadge(actor) != null) ...[
-                                            const SizedBox(width: 6),
-                                            _matchBadge(actor)!,
-                                          ],
+                                          ...[
+                                          const SizedBox(width: 6),
+                                          matchBadge(actor),
+                                        ],
                                           // Bütçe Esnekliği Toggle
                                           _buildActorBudgetToggle(role, actor.uid),
                                         ],
@@ -1366,7 +1367,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
             scale: 0.7,
             child: Switch(
               value: isEnabled,
-              activeColor: AppTheme.success,
+              activeThumbColor: AppTheme.success,
               activeTrackColor: AppTheme.success.withValues(alpha: 0.3),
               inactiveThumbColor: AppTheme.textTertiary,
               inactiveTrackColor: AppTheme.border,
@@ -1626,7 +1627,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
         imageWidget = Image.network(
           _project.primaryImageUrl!,
           fit: BoxFit.contain,
-          errorBuilder: (_, __, ___) => Image.asset(
+          errorBuilder: (_, _, _) => Image.asset(
             'assets/images/ana-logo-siyah.png',
             fit: BoxFit.contain,
           ),
@@ -1635,7 +1636,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
         imageWidget = Image.file(
           File(_project.primaryImageUrl!),
           fit: BoxFit.contain,
-          errorBuilder: (_, __, ___) => Image.asset(
+          errorBuilder: (_, _, _) => Image.asset(
             'assets/images/ana-logo-siyah.png',
             fit: BoxFit.contain,
           ),
@@ -1956,16 +1957,20 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     );
 
     if (confirmed == true && mounted) {
+      if (!context.mounted) return;
       final success = await context.read<ProjectProvider>().deleteProject(_project.id);
       if (success && mounted) {
+        if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Proje başarıyla silindi.'),
             backgroundColor: AppTheme.success,
           ),
         );
+        if (!context.mounted) return;
         Navigator.pop(context, true);
       } else if (mounted) {
+        if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Hata oluştu: ${context.read<ProjectProvider>().errorMessage ?? "Bilinmeyen hata"}'),
@@ -2024,7 +2029,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 border: Border.all(color: AppTheme.border, width: 0.5),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
+                    color: Colors.black.withValues(alpha: 0.2),
                     blurRadius: 8,
                     offset: const Offset(0, 4),
                   ),
@@ -2106,7 +2111,7 @@ class _ProjectSampleVideoPlayerState extends State<_ProjectSampleVideoPlayer> {
           playedColor: AppTheme.accent,
           handleColor: AppTheme.accent,
           backgroundColor: AppTheme.surfaceElevated,
-          bufferedColor: AppTheme.primary.withOpacity(0.3),
+          bufferedColor: AppTheme.primary.withValues(alpha: 0.3),
         ),
       );
 
@@ -2127,7 +2132,10 @@ class _ProjectSampleVideoPlayerState extends State<_ProjectSampleVideoPlayer> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MaxWidthBox(maxWidth: 640, child: _buildPlayer(context));
+
+  Widget _buildPlayer(BuildContext context) {
     if (_isLoading) {
       return Container(
         height: 200,

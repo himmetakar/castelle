@@ -79,7 +79,7 @@ class _AssignModeratorScreenState extends State<AssignModeratorScreen> {
           .collection(AppConstants.usersCollection)
           .orderBy('fullName')
           .startAt([queryCapitalized])
-          .endAt([queryCapitalized + '\uf8ff'])
+          .endAt(['$queryCapitalized\uf8ff'])
           .limit(10)
           .get();
 
@@ -87,7 +87,7 @@ class _AssignModeratorScreenState extends State<AssignModeratorScreen> {
           .collection(AppConstants.usersCollection)
           .orderBy('fullName')
           .startAt([cleanQuery])
-          .endAt([cleanQuery + '\uf8ff'])
+          .endAt(['$cleanQuery\uf8ff'])
           .limit(10)
           .get();
 
@@ -425,6 +425,7 @@ class _AssignModeratorScreenState extends State<AssignModeratorScreen> {
                           });
 
                           if (mounted) {
+                            if (!context.mounted) return;
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
                                 content: Text('Moderatör yetkileri güncellendi.'),
@@ -466,7 +467,7 @@ class _AssignModeratorScreenState extends State<AssignModeratorScreen> {
       ),
       value: value,
       onChanged: onChanged,
-      activeColor: AppTheme.accent,
+      activeThumbColor: AppTheme.accent,
       contentPadding: EdgeInsets.zero,
       dense: true,
     );
@@ -480,7 +481,7 @@ class _AssignModeratorScreenState extends State<AssignModeratorScreen> {
       ),
       value: value,
       onChanged: onChanged,
-      activeColor: AppTheme.accent,
+      activeThumbColor: AppTheme.accent,
       contentPadding: EdgeInsets.zero,
       dense: true,
     );
@@ -563,7 +564,7 @@ class _AssignModeratorScreenState extends State<AssignModeratorScreen> {
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: _searchResults.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  separatorBuilder: (_, _) => const Divider(height: 1),
                   itemBuilder: (context, index) {
                     final user = _searchResults[index];
                     final isAlreadyMod = user.role == UserRole.moderator;
@@ -891,7 +892,7 @@ class _AssignModeratorScreenState extends State<AssignModeratorScreen> {
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: docs.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 10),
+                  separatorBuilder: (_, _) => const SizedBox(height: 10),
                   itemBuilder: (context, index) {
                     final doc = docs[index];
                     final user = UserModel.fromMap(doc.data(), doc.id);

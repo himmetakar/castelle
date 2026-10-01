@@ -96,7 +96,7 @@ class AppTheme {
   // ═══════════════════════════════════════════════════════
   static List<BoxShadow> get shadowSm => [
         BoxShadow(
-          color: Colors.black.withOpacity(0.04),
+          color: Colors.black.withValues(alpha: 0.04),
           blurRadius: 4,
           offset: const Offset(0, 2),
         ),
@@ -104,7 +104,7 @@ class AppTheme {
 
   static List<BoxShadow> get shadowMd => [
         BoxShadow(
-          color: Colors.black.withOpacity(0.06),
+          color: Colors.black.withValues(alpha: 0.06),
           blurRadius: 12,
           offset: const Offset(0, 4),
         ),
@@ -112,7 +112,7 @@ class AppTheme {
 
   static List<BoxShadow> get shadowLg => [
         BoxShadow(
-          color: Colors.black.withOpacity(0.08),
+          color: Colors.black.withValues(alpha: 0.08),
           blurRadius: 24,
           offset: const Offset(0, 8),
         ),
@@ -120,7 +120,7 @@ class AppTheme {
 
   static List<BoxShadow> get glowPrimary => [
         BoxShadow(
-          color: primary.withOpacity(0.12),
+          color: primary.withValues(alpha: 0.12),
           blurRadius: 20,
           spreadRadius: 2,
         ),
@@ -128,7 +128,7 @@ class AppTheme {
 
   static List<BoxShadow> get glowAccent => [
         BoxShadow(
-          color: accent.withOpacity(0.12),
+          color: accent.withValues(alpha: 0.12),
           blurRadius: 20,
           spreadRadius: 2,
         ),
@@ -374,7 +374,7 @@ class AppTheme {
         }),
         trackColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return primary.withOpacity(0.3);
+            return primary.withValues(alpha: 0.3);
           }
           return surfaceLight;
         }),

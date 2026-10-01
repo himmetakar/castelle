@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:castelle/core/providers/auth_provider.dart';
@@ -24,7 +23,6 @@ class SplashScreen extends StatefulWidget {
 class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
   ui.FragmentShader? _shader;
   late AnimationController _timeController;
-  bool _shaderLoadError = false;
 
   @override
   void initState() {
@@ -61,11 +59,6 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
       }
     } catch (e) {
       debugPrint("Shader yüklenirken hata oluştu: $e");
-      if (mounted) {
-        setState(() {
-          _shaderLoadError = true;
-        });
-      }
     }
   }
 
@@ -94,8 +87,10 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
       final prefs = await SharedPreferences.getInstance();
       final showOnboarding = prefs.getBool('show_onboarding') ?? true;
       if (showOnboarding) {
+        if (!mounted) return;
         context.go('/onboarding');
       } else {
+        if (!mounted) return;
         context.go('/login');
       }
     }

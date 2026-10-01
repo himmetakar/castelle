@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:castelle/core/widgets/web_frame.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -291,7 +292,7 @@ class _ProjectDetailsBottomSheetState extends State<ProjectDetailsBottomSheet> {
                 child: ListView.separated(
                   shrinkWrap: true,
                   itemCount: project.roles.length,
-                  separatorBuilder: (_, __) => const Divider(),
+                  separatorBuilder: (_, _) => const Divider(),
                   itemBuilder: (c, idx) {
                     final role = project.roles[idx];
                     return ListTile(
@@ -927,7 +928,7 @@ class _ProjectDetailsBottomSheetState extends State<ProjectDetailsBottomSheet> {
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: urls.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 10),
+        separatorBuilder: (_, _) => const SizedBox(width: 10),
         itemBuilder: (context, index) {
           return ClipRRect(
             borderRadius: BorderRadius.circular(8),
@@ -976,9 +977,13 @@ class RichTextRenderer extends StatelessWidget {
         
         String cleanLine = line;
         if (isBullet) {
-          if (trimmed.startsWith('- ')) cleanLine = trimmed.substring(2);
-          else if (trimmed.startsWith('• ')) cleanLine = trimmed.substring(2);
-          else if (trimmed.startsWith('* ')) cleanLine = trimmed.substring(2);
+          if (trimmed.startsWith('- ')) {
+            cleanLine = trimmed.substring(2);
+          } else if (trimmed.startsWith('• ')) {
+            cleanLine = trimmed.substring(2);
+          } else if (trimmed.startsWith('* ')) {
+            cleanLine = trimmed.substring(2);
+          }
         }
 
         final List<TextSpan> spans = [];
@@ -1084,7 +1089,10 @@ class _ProjectSampleVideoPlayerState extends State<_ProjectSampleVideoPlayer> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MaxWidthBox(maxWidth: 640, child: _buildPlayer(context));
+
+  Widget _buildPlayer(BuildContext context) {
     if (!_initialized) {
       return Container(
         height: 180,

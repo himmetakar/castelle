@@ -3,12 +3,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
+import 'package:castelle/core/utils/video_utils.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:video_player/video_player.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:file_picker/file_picker.dart';
 
@@ -502,7 +502,7 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
       final file = await _picker.pickVideo(source: ImageSource.gallery, maxDuration: const Duration(seconds: 45));
       if (file != null) {
         // Enforce landscape check
-        final controller = VideoPlayerController.file(File(file.path));
+        final controller = localVideoController(file.path);
         await controller.initialize();
         final size = controller.value.size;
         final isLandscape = size.width > size.height;
@@ -1011,7 +1011,7 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
                 ),
                 value: _isPrivate,
                 onChanged: (val) => setState(() => _isPrivate = val),
-                activeColor: AppTheme.accent,
+                activeThumbColor: AppTheme.accent,
                 contentPadding: EdgeInsets.zero,
               ).animate().fadeIn(delay: 315.ms),
 
@@ -1105,7 +1105,7 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
                 ),
                 value: _cashPayment,
                 onChanged: (val) => setState(() => _cashPayment = val),
-                activeColor: AppTheme.accent,
+                activeThumbColor: AppTheme.accent,
                 contentPadding: EdgeInsets.zero,
               ).animate().fadeIn(delay: 335.ms),
 
@@ -2144,7 +2144,7 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
               shrinkWrap: true,
               padding: EdgeInsets.zero,
               itemCount: _filteredModerators.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
+              separatorBuilder: (_, _) => const Divider(height: 1),
               itemBuilder: (context, index) {
                 final mod = _filteredModerators[index];
                 return ListTile(
@@ -2333,7 +2333,6 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
 
   Future<void> _pickRoleAudio(int roleIndex, _RoleFormData role) async {
     // context'i await'ten önce al
-    final authProvider = context.read<AuthProvider>();
     final messenger = ScaffoldMessenger.of(context);
 
     final result = await FilePicker.platform.pickFiles(

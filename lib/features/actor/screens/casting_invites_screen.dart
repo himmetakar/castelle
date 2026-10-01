@@ -31,6 +31,7 @@ class _CastingInvitesScreenState extends State<CastingInvitesScreen> {
 
   List<ProjectModel> _allProjects = [];
   bool _loadingAllProjects = false;
+  List<ProjectModel> _endedProjects = [];
 
   @override
   void initState() {
@@ -40,6 +41,7 @@ class _CastingInvitesScreenState extends State<CastingInvitesScreen> {
 
   Future<void> _loadAllProjects() async {
     setState(() => _loadingAllProjects = true);
+    _loadEndedProjects();
     try {
       final projects = await _projectService.getActiveProjects();
       setState(() {
@@ -51,6 +53,17 @@ class _CastingInvitesScreenState extends State<CastingInvitesScreen> {
         _allProjects = [];
         _loadingAllProjects = false;
       });
+    }
+  }
+
+  Future<void> _loadEndedProjects() async {
+    try {
+      final ended = await _projectService.getEndedProjects();
+      if (!mounted) return;
+      setState(() => _endedProjects = ended);
+    } catch (e) {
+      // Bölüm opsiyonel; hata olursa sadece gösterilmez
+      debugPrint('⚠️ [CastingInvites] Sonuçlanan projeler yüklenemedi: $e');
     }
   }
 
@@ -156,7 +169,7 @@ class _CastingInvitesScreenState extends State<CastingInvitesScreen> {
     if (_loadingAllProjects && _allProjects.isEmpty) {
       return const Center(child: CircularProgressIndicator(color: AppTheme.accent));
     }
-    if (_allProjects.isEmpty) {
+    if (_allProjects.isEmpty && _endedProjects.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -174,14 +187,102 @@ class _CastingInvitesScreenState extends State<CastingInvitesScreen> {
     return RefreshIndicator(
       onRefresh: _loadAllProjects,
       color: AppTheme.accent,
-      child: ListView.separated(
+      child: ListView(
         padding: const EdgeInsets.all(20),
-        itemCount: _allProjects.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 14),
-        itemBuilder: (context, index) {
-          final project = _allProjects[index];
-          return _buildProjectPreviewCard(project, index);
-        },
+        children: [
+          if (_allProjects.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Center(
+                child: Text(
+                  'Aktif Proje Bulunmuyor',
+                  style: GoogleFonts.outfit(fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
+                ),
+              ),
+            ),
+          for (var i = 0; i < _allProjects.length; i++) ...[
+            if (i > 0) const SizedBox(height: 14),
+            _buildProjectPreviewCard(_allProjects[i], i),
+          ],
+          if (_endedProjects.isNotEmpty) ...[
+            const SizedBox(height: 28),
+            _buildEndedProjectsSection(),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// "Sonuçlanan" — süresi dolmuş projeler; sadece görsel + ad, tıklanamaz.
+  Widget _buildEndedProjectsSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Sonuçlanan',
+          style: GoogleFonts.outfit(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: AppTheme.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 150,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: _endedProjects.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 12),
+            itemBuilder: (context, index) => _buildEndedProjectCard(_endedProjects[index]),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEndedProjectCard(ProjectModel project) {
+    final url = project.primaryImageUrl ?? '';
+    const fallback = Image(
+      image: AssetImage('assets/images/ana-logo-siyah.png'),
+      fit: BoxFit.contain,
+    );
+    return Opacity(
+      opacity: 0.55,
+      child: SizedBox(
+        width: 140,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: 104,
+              width: 140,
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                border: Border.all(color: AppTheme.border, width: 0.5),
+              ),
+              child: url.startsWith('http')
+                  ? Image.network(
+                      url,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, _, _) => fallback,
+                    )
+                  : fallback,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              project.title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: AppTheme.textSecondary,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -208,7 +309,7 @@ class _CastingInvitesScreenState extends State<CastingInvitesScreen> {
           child: Image.asset(
             'assets/images/ana-logo-siyah.png',
             fit: BoxFit.contain,
-            errorBuilder: (_, __, ___) => Icon(
+            errorBuilder: (_, _, _) => Icon(
               Icons.movie_creation_outlined,
               size: size * 0.4,
               color: AppTheme.textTertiary,
@@ -223,7 +324,7 @@ class _CastingInvitesScreenState extends State<CastingInvitesScreen> {
       imageWidget = Image.network(
         primaryImageUrl,
         fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => Image.asset(
+        errorBuilder: (_, _, _) => Image.asset(
           'assets/images/ana-logo-siyah.png',
           fit: BoxFit.contain,
         ),
@@ -232,7 +333,7 @@ class _CastingInvitesScreenState extends State<CastingInvitesScreen> {
       imageWidget = Image.file(
         File(primaryImageUrl),
         fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => Image.asset(
+        errorBuilder: (_, _, _) => Image.asset(
           'assets/images/ana-logo-siyah.png',
           fit: BoxFit.contain,
         ),
@@ -477,7 +578,7 @@ class _CastingInvitesScreenState extends State<CastingInvitesScreen> {
             imageWidget = Image.network(
               primaryImageUrl,
               fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) => Image.asset(
+              errorBuilder: (_, _, _) => Image.asset(
                 'assets/images/ana-logo-siyah.png',
                 fit: BoxFit.contain,
               ),
@@ -486,7 +587,7 @@ class _CastingInvitesScreenState extends State<CastingInvitesScreen> {
             imageWidget = Image.file(
               File(primaryImageUrl),
               fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) => Image.asset(
+              errorBuilder: (_, _, _) => Image.asset(
                 'assets/images/ana-logo-siyah.png',
                 fit: BoxFit.contain,
               ),

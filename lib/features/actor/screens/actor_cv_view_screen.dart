@@ -1,5 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:castelle/core/widgets/web_frame.dart';
+import 'package:castelle/core/utils/video_utils.dart';
 import 'package:castelle/core/utils/platform_utils.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -11,7 +13,6 @@ import 'package:chewie/chewie.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:dio/dio.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:castelle/core/services/actor_profile_service.dart';
@@ -23,7 +24,6 @@ import 'package:castelle/core/providers/auth_provider.dart';
 import 'package:castelle/features/actor/providers/actor_profile_provider.dart';
 import 'package:castelle/features/actor/screens/actor_profile_edit_screen.dart';
 import 'package:castelle/features/chat/screens/chat_room_screen.dart';
-import 'package:castelle/features/actor/widgets/skills_input_widget.dart';
 import 'package:castelle/core/widgets/video_record_screen.dart';
 
 
@@ -55,8 +55,6 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
   bool _isBioEditing = false;
   bool _isPhysicalEditing = false;
   bool _isGalleryEditing = false;
-  bool _isHobbiesEditing = false;
-  bool _isSkillsEditing = false;
   bool _isFilmographyEditing = false;
   bool _isVideosEditing = false;
   String? _processingVideoKey;
@@ -82,14 +80,11 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
   Gender? _editGender;
   EyeColor? _editEyeColor;
   HairColor? _editHairColor;
-  List<String> _editHobbies = [];
-  List<String> _editSkills = [];
   List<Map<String, dynamic>> _editFilmography = [];
 
   final ImagePicker _picker = ImagePicker();
 
   ActorProfileModel? _loadedActor;
-  bool _isLoadingActor = false;
 
   @override
   void initState() {
@@ -117,7 +112,6 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
     final actorId = widget.actor?.uid;
     if (actorId == null) return;
 
-    if (mounted) setState(() => _isLoadingActor = true);
     try {
       final doc = await FirebaseFirestore.instance
           .collection('users')
@@ -129,13 +123,10 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
         if (!mounted) return;
         setState(() {
           _loadedActor = ActorProfileModel.fromMap({...doc.data()!, ...private}, doc.id);
-          _isLoadingActor = false;
         });
-      } else {
-        if (mounted) setState(() => _isLoadingActor = false);
       }
-    } catch (_) {
-      if (mounted) setState(() => _isLoadingActor = false);
+    } catch (e) {
+      debugPrint('⚠️ [ActorCv] Oyuncu yüklenemedi: $e');
     }
   }
 
@@ -186,6 +177,7 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
     final success = await provider.saveProfile(updated);
     if (success) {
       setState(() => _isHeaderEditing = false);
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Başlık bilgileri güncellendi.'), backgroundColor: AppTheme.success),
       );
@@ -207,6 +199,7 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
     final success = await provider.saveProfile(updated);
     if (success) {
       setState(() => _isBioEditing = false);
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Hakkımda bölümü güncellendi.'), backgroundColor: AppTheme.success),
       );
@@ -238,46 +231,9 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
     final success = await provider.saveProfile(updated);
     if (success) {
       setState(() => _isPhysicalEditing = false);
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Fiziksel özellikler güncellendi.'), backgroundColor: AppTheme.success),
-      );
-    }
-  }
-
-  void _startHobbiesEditing(ActorProfileModel profile) {
-    setState(() {
-      _editHobbies = List.from(profile.hobbies);
-      _isHobbiesEditing = true;
-    });
-  }
-
-  Future<void> _saveHobbies(ActorProfileProvider provider) async {
-    if (provider.profile == null) return;
-    final updated = provider.profile!.copyWith(hobbies: _editHobbies);
-    final success = await provider.saveProfile(updated);
-    if (success) {
-      setState(() => _isHobbiesEditing = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Hobiler güncellendi.'), backgroundColor: AppTheme.success),
-      );
-    }
-  }
-
-  void _startSkillsEditing(ActorProfileModel profile) {
-    setState(() {
-      _editSkills = List.from(profile.skills);
-      _isSkillsEditing = true;
-    });
-  }
-
-  Future<void> _saveSkills(ActorProfileProvider provider) async {
-    if (provider.profile == null) return;
-    final updated = provider.profile!.copyWith(skills: _editSkills);
-    final success = await provider.saveProfile(updated);
-    if (success) {
-      setState(() => _isSkillsEditing = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Yetenekler güncellendi.'), backgroundColor: AppTheme.success),
       );
     }
   }
@@ -295,6 +251,7 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
     final success = await provider.saveProfile(updated);
     if (success) {
       setState(() => _isFilmographyEditing = false);
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Filmografi güncellendi.'), backgroundColor: AppTheme.success),
       );
@@ -306,10 +263,12 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
       final xFile = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
       if (xFile == null) return;
       await provider.uploadProfilePhoto(File(xFile.path));
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Profil resmi güncellendi.'), backgroundColor: AppTheme.success),
       );
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Profil resmi seçilemedi: $e'), backgroundColor: AppTheme.error),
       );
@@ -329,10 +288,12 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
       if (files.isEmpty) return;
       final fileList = files.map((x) => File(x.path)).toList();
       await provider.uploadMultipleGalleryPhotos(fileList);
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('${fileList.length} adet fotoğraf portfolyoya eklendi.'), backgroundColor: AppTheme.success),
       );
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Fotoğraf seçilemedi: $e'), backgroundColor: AppTheme.error),
       );
@@ -371,6 +332,7 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
 
       if (!proceed) return;
 
+      if (!mounted) return;
       final ImageSource? selectedSource = await showModalBottomSheet<ImageSource>(
         context: context,
         backgroundColor: AppTheme.surfaceCard,
@@ -418,6 +380,7 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
 
       final String? videoPath;
       if (selectedSource == ImageSource.camera) {
+        if (!mounted) return;
         videoPath = await Navigator.push<String>(
           context,
           MaterialPageRoute(
@@ -446,7 +409,7 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
       if (videoPath == null || videoPath.isEmpty) return;
 
       // Video yataylık kontrolü
-      final controller = VideoPlayerController.file(File(videoPath));
+      final controller = localVideoController(videoPath);
       await controller.initialize();
       final size = controller.value.size;
       final isLandscape = size.width > size.height;
@@ -476,16 +439,19 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
       final success = await provider.uploadAndCompressProfileVideo(File(videoPath), videoKey);
       setState(() => _processingVideoKey = null);
       if (success) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Video başarıyla yüklendi.'), backgroundColor: AppTheme.success),
         );
       } else {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(provider.errorMessage ?? 'Video yüklenemedi.'), backgroundColor: AppTheme.error),
         );
       }
     } catch (e) {
       setState(() => _processingVideoKey = null);
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Video seçilemedi: $e'), backgroundColor: AppTheme.error),
       );
@@ -519,7 +485,7 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
     required ValueChanged<T?> onChanged,
   }) {
     return DropdownButtonFormField<T>(
-      value: value,
+      initialValue: value,
       dropdownColor: AppTheme.surfaceCard,
       style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
       decoration: InputDecoration(
@@ -926,7 +892,7 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
                           scale: 0.8,
                           child: Switch(
                             value: profile.isHidden,
-                            activeColor: AppTheme.accent,
+                            activeThumbColor: AppTheme.accent,
                             onChanged: (val) {
                               provider.toggleProfileVisibility(val);
                             },
@@ -1145,8 +1111,9 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
               GridView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
+                gridDelegate: adaptiveGridDelegate(
+                  mobileCount: 3,
+                  maxExtent: 180,
                   crossAxisSpacing: 8,
                   mainAxisSpacing: 8,
                   childAspectRatio: 1,
@@ -1187,6 +1154,7 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
                           onTap: () async {
                             final success = await provider.deleteGalleryPhoto(idx);
                             if (success) {
+                              if (!context.mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(content: Text('Fotoğraf silindi.'), backgroundColor: AppTheme.success),
                               );
@@ -1387,7 +1355,7 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
               width: width,
               height: height,
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Container(color: AppTheme.surfaceLight, child: const Icon(Icons.broken_image)),
+              errorBuilder: (_, _, _) => Container(color: AppTheme.surfaceLight, child: const Icon(Icons.broken_image)),
             )
           : Image.file(
               File(url),
@@ -1697,8 +1665,9 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
             child: GridView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
+              gridDelegate: adaptiveGridDelegate(
+                mobileCount: 3,
+                maxExtent: 220,
                 childAspectRatio: 1.8,
                 crossAxisSpacing: 10,
                 mainAxisSpacing: 10,
@@ -1727,276 +1696,6 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
                 );
               },
             ),
-          ),
-      ],
-    );
-  }
-
-  // HOBİLER BÖLÜMÜ
-  Widget _buildHobbiesSection(ActorProfileModel profile, ActorProfileProvider provider) {
-    if (_isHobbiesEditing) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildSectionHeader(
-            'Hobiler & İlgi Alanları',
-            Icons.favorite_border,
-            profile,
-            'hobbies',
-            provider,
-            isEditing: true,
-            onEditPressed: () => setState(() => _isHobbiesEditing = false),
-          ),
-          const SizedBox(height: 10),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppTheme.surfaceCard,
-              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-              border: Border.all(color: AppTheme.border.withValues(alpha: 0.3)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (_editHobbies.isNotEmpty) ...[
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: _editHobbies.map((hobi) {
-                      return Chip(
-                        label: Text(hobi, style: const TextStyle(fontSize: 12)),
-                        onDeleted: () {
-                          setState(() {
-                            _editHobbies.remove(hobi);
-                          });
-                        },
-                        deleteIconColor: AppTheme.error,
-                        backgroundColor: AppTheme.primary.withValues(alpha: 0.08),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _hobbyInputController,
-                        style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
-                        decoration: const InputDecoration(
-                          hintText: 'Hobi yazın...',
-                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        ),
-                        onSubmitted: (val) {
-                          if (val.trim().isNotEmpty && !_editHobbies.contains(val.trim())) {
-                            setState(() {
-                              _editHobbies.add(val.trim());
-                              _hobbyInputController.clear();
-                            });
-                          }
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      icon: const Icon(Icons.add_circle, color: AppTheme.accent),
-                      onPressed: () {
-                        final val = _hobbyInputController.text.trim();
-                        if (val.isNotEmpty && !_editHobbies.contains(val)) {
-                          setState(() {
-                            _editHobbies.add(val);
-                            _hobbyInputController.clear();
-                          });
-                        }
-                      },
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: () => setState(() => _isHobbiesEditing = false),
-                      child: const Text('İptal', style: TextStyle(color: AppTheme.textTertiary)),
-                    ),
-                    const SizedBox(width: 8),
-                    ElevatedButton(
-                      onPressed: () => _saveHobbies(provider),
-                      style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accent),
-                      child: const Text('Kaydet'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionHeader(
-          'Hobiler & İlgi Alanları',
-          Icons.favorite_border,
-          profile,
-          'hobbies',
-          provider,
-          isEditing: false,
-          onEditPressed: widget.isOwner ? () => _startHobbiesEditing(profile) : null,
-        ),
-        const SizedBox(height: 10),
-        if (profile.hobbies.isEmpty)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppTheme.surfaceCard,
-              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-              border: Border.all(color: AppTheme.border.withValues(alpha: 0.3)),
-            ),
-            child: Text(
-              'Hobi eklenmemiş.',
-              style: GoogleFonts.inter(color: AppTheme.textTertiary, fontSize: 13),
-            ),
-          )
-        else
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: profile.hobbies.map((hobi) {
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                decoration: BoxDecoration(
-                  color: AppTheme.primary.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-                  border: Border.all(color: AppTheme.primary.withValues(alpha: 0.2)),
-                ),
-                child: Text(
-                  hobi,
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    color: AppTheme.textPrimary,
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-      ],
-    );
-  }
-
-  // YETENEKLER BÖLÜMÜ
-  Widget _buildSkillsSection(ActorProfileModel profile, ActorProfileProvider provider) {
-    if (_isSkillsEditing) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildSectionHeader(
-            'Yetenekler',
-            Icons.star_outline,
-            profile,
-            'skills',
-            provider,
-            isEditing: true,
-            onEditPressed: () => setState(() => _isSkillsEditing = false),
-          ),
-          const SizedBox(height: 10),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppTheme.surfaceCard,
-              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-              border: Border.all(color: AppTheme.border.withValues(alpha: 0.3)),
-            ),
-            child: Column(
-              children: [
-                SkillsInputWidget(
-                  skills: _editSkills,
-                  onSkillsChanged: (updated) {
-                    setState(() {
-                      _editSkills = updated;
-                    });
-                  },
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: () => setState(() => _isSkillsEditing = false),
-                      child: const Text('İptal', style: TextStyle(color: AppTheme.textTertiary)),
-                    ),
-                    const SizedBox(width: 8),
-                    ElevatedButton(
-                      onPressed: () => _saveSkills(provider),
-                      style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accent),
-                      child: const Text('Kaydet'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionHeader(
-          'Yetenekler',
-          Icons.star_outline,
-          profile,
-          'skills',
-          provider,
-          isEditing: false,
-          onEditPressed: widget.isOwner ? () => _startSkillsEditing(profile) : null,
-        ),
-        const SizedBox(height: 10),
-        if (profile.skills.isEmpty)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppTheme.surfaceCard,
-              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-              border: Border.all(color: AppTheme.border.withValues(alpha: 0.3)),
-            ),
-            child: Text(
-              'Yetenek eklenmemiş.',
-              style: GoogleFonts.inter(color: AppTheme.textTertiary, fontSize: 13),
-            ),
-          )
-        else
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: profile.skills.map((yetenek) {
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                decoration: BoxDecoration(
-                  color: AppTheme.accent.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-                  border: Border.all(color: AppTheme.accent.withValues(alpha: 0.2)),
-                ),
-                child: Text(
-                  yetenek,
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    color: AppTheme.textPrimary,
-                  ),
-                ),
-              );
-            }).toList(),
           ),
       ],
     );
@@ -2882,6 +2581,7 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
               final success = await provider.saveProfile(updated);
               if (ctx.mounted) Navigator.pop(ctx);
               if (success) {
+                if (!context.mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Banka hesap bilgileri kaydedildi.'), backgroundColor: AppTheme.success),
                 );
@@ -3449,6 +3149,7 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
 
     // 3. İndirme Diyaloğu Göster
     double progress = 0.0;
+    if (!context.mounted) return;
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -3784,6 +3485,7 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
       await ActorProfileService().rejectActor(profile.uid, reason: reason);
       await _loadLatestActorProfile();
       if (mounted) {
+        if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('${profile.fullName} kullanıcısının üyelik hakları donduruldu (pasife alındı).'),
@@ -3793,6 +3495,7 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
       }
     } catch (e) {
       if (mounted) {
+        if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Hata: $e'), backgroundColor: AppTheme.error),
         );
@@ -3833,6 +3536,7 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
       await ActorProfileService().approveActor(profile.uid);
       await _loadLatestActorProfile();
       if (mounted) {
+        if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('${profile.fullName} kullanıcısının üyeliği tekrar aktif edildi ✅'),
@@ -3842,6 +3546,7 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
       }
     } catch (e) {
       if (mounted) {
+        if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Hata: $e'), backgroundColor: AppTheme.error),
         );
@@ -3911,10 +3616,11 @@ class _ProfileInlineVideoPlayerState extends State<_ProfileInlineVideoPlayer> {
     });
 
     try {
-      final isLocal = widget.videoUrl.startsWith('/') ||
+      // Web'de dart:io dosyası yok; yerel yol oynatılamaz, ağ URL'si gibi denenir
+      final isLocal = !kIsWeb && (widget.videoUrl.startsWith('/') ||
           widget.videoUrl.startsWith('file://') ||
           widget.videoUrl.contains('/data/') ||
-          widget.videoUrl.contains('/storage/');
+          widget.videoUrl.contains('/storage/'));
 
       if (isLocal) {
         final cleanPath = widget.videoUrl.replaceFirst(RegExp(r'^file://'), '');
@@ -3957,7 +3663,10 @@ class _ProfileInlineVideoPlayerState extends State<_ProfileInlineVideoPlayer> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MaxWidthBox(maxWidth: 640, child: _buildPlayer(context));
+
+  Widget _buildPlayer(BuildContext context) {
     if (_isInit && _chewieController != null && _videoPlayerController != null) {
       return AspectRatio(
         aspectRatio: _videoPlayerController!.value.aspectRatio,

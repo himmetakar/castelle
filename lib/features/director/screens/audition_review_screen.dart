@@ -115,10 +115,11 @@ class _AuditionReviewScreenState extends State<AuditionReviewScreen> {
     }
 
     // Yerel dosya mı?
-    final isLocalFile = videoUrl.startsWith('/')
+    // Web'de dart:io dosya erişimi yok; yerel yollar orada geçersiz adres sayılır
+    final isLocalFile = !kIsWeb && (videoUrl.startsWith('/')
         || videoUrl.startsWith('file://')
         || videoUrl.contains('/data/')
-        || videoUrl.contains('/storage/');
+        || videoUrl.contains('/storage/'));
 
     if (isLocalFile) {
       final cleanPath = videoUrl.replaceFirst(RegExp(r'^file://'), '');
@@ -352,6 +353,7 @@ class _AuditionReviewScreenState extends State<AuditionReviewScreen> {
     }
 
     if (selectedDir == null) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('İndirme iptal edildi. Klasör seçilmedi.'),
@@ -394,6 +396,7 @@ class _AuditionReviewScreenState extends State<AuditionReviewScreen> {
     }
 
     // 4. İndirme Diyaloğunu Göster
+    if (!mounted) return;
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -715,7 +718,8 @@ class _AuditionReviewScreenState extends State<AuditionReviewScreen> {
   Widget _buildVideoPlayerBounded(Widget child) {
     return Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxHeight: 520),
+        // Web'de geniş ekranda devasa görünmesin
+        constraints: BoxConstraints(maxHeight: 520, maxWidth: kIsWeb ? 640 : double.infinity),
         child: child,
       ),
     );
@@ -1373,12 +1377,12 @@ class _AuditionReviewScreenState extends State<AuditionReviewScreen> {
                     ? Image.network(
                         photo,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => _buildFallbackPhoto(photo),
+                        errorBuilder: (_, _, _) => _buildFallbackPhoto(photo),
                       )
                     : Image.file(
                         File(photo),
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => _buildFallbackPhoto(photo),
+                        errorBuilder: (_, _, _) => _buildFallbackPhoto(photo),
                       ),
               ),
             ),
@@ -2095,7 +2099,7 @@ class _OptionRequestDialogState extends State<OptionRequestDialog> {
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
                         itemCount: _questionControllers.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 12),
+                        separatorBuilder: (_, _) => const SizedBox(height: 12),
                         itemBuilder: (context, index) {
                           return Row(
                             children: [

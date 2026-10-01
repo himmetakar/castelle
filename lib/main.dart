@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:castelle/core/widgets/web_frame.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -123,6 +124,7 @@ class _CastelleAppContentState extends State<CastelleAppContent> {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       routerConfig: _router,
+      builder: (context, child) => WebFrame(child: child ?? const SizedBox.shrink()),
     );
   }
 }

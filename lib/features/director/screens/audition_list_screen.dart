@@ -43,10 +43,11 @@ class _AuditionListScreenState extends State<AuditionListScreen>
   String _downloadProgressText = '';
   double _downloadPercentage = 0.0;
 
-  // Tab sırası: İşlem Bekliyor, İnceleniyor, Opsiyon, Onaylandi, Reddedildi, Revizyon
+  // Tab sırası: İşlem Bekliyor, Opsiyon, Onaylandi, Reddedildi, Revizyon
+  // Ayrı "İnceleniyor" sekmesi kaldırıldı: indirilip incelemeye alınan
+  // (reviewing) audition'lar İşlem Bekliyor'da "İnceleniyor" etiketiyle durur.
   final _tabs = const [
-    AuditionStatus.submitted,   // İşlem Bekliyor — gelen audition talepleri
-    AuditionStatus.reviewing,   // İnceleniyor — işleme alınan
+    AuditionStatus.submitted,   // İşlem Bekliyor — submitted + reviewing
     AuditionStatus.options,     // Opsiyon — opsiyon talep edilen
     AuditionStatus.approved,
     AuditionStatus.rejected,
@@ -56,7 +57,6 @@ class _AuditionListScreenState extends State<AuditionListScreen>
   // Admin/Moderatör panelinde görünecek özel etiketler
   static const _tabLabels = [
     'İşlem Bekliyor',
-    'İnceleniyor',
     'Opsiyon',
     'Onaylandı',
     'Reddedildi',
@@ -107,18 +107,25 @@ class _AuditionListScreenState extends State<AuditionListScreen>
     _loadAuditions(_tabs[_tabController.index]);
   }
 
+  /// Bir sekmenin kapsadığı durumlar
+  List<AuditionStatus> _statusesFor(AuditionStatus status) =>
+      status == AuditionStatus.submitted
+          ? const [AuditionStatus.submitted, AuditionStatus.reviewing]
+          : [status];
+
   void _loadAuditions(AuditionStatus status) {
+    final statuses = _statusesFor(status);
     if (widget.isModerator && _moderatorProjectIds.isNotEmpty) {
       // Moderatör: sadece kendi projelerindeki auditionları getir
       context.read<AuditionProvider>().loadAllAuditions(
-        status: status,
+        statuses: statuses,
         projectIds: _moderatorProjectIds,
       );
     } else if (widget.isModerator && _moderatorProjectIds.isEmpty) {
       // Moderatör ama henüz proje atanmamış — boş liste
       context.read<AuditionProvider>().clearAuditions();
     } else {
-      context.read<AuditionProvider>().loadAllAuditions(status: status);
+      context.read<AuditionProvider>().loadAllAuditions(statuses: statuses);
     }
   }
 
@@ -525,6 +532,8 @@ class _AuditionListScreenState extends State<AuditionListScreen>
                     runSpacing: 4,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
+                      if (audition.status == AuditionStatus.reviewing)
+                        _buildMiniChip('İnceleniyor', AppTheme.primarySoft),
                       if (audition.projectTitle.trim().isNotEmpty)
                         _buildMiniChip(
                             audition.projectTitle, AppTheme.info),

@@ -291,7 +291,7 @@ class _ModeratorApprovalsScreenState extends State<ModeratorApprovalsScreen> {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: _getActionColor(actionType).withOpacity(0.1),
+                                  color: _getActionColor(actionType).withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: Text(
@@ -358,7 +358,7 @@ class _ModeratorApprovalsScreenState extends State<ModeratorApprovalsScreen> {
                                   icon: const Icon(Icons.close_rounded, size: 18),
                                   label: const Text('Reddet'),
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppTheme.error.withOpacity(0.1),
+                                    backgroundColor: AppTheme.error.withValues(alpha: 0.1),
                                     foregroundColor: AppTheme.error,
                                     elevation: 0,
                                     padding: const EdgeInsets.symmetric(vertical: 12),
@@ -397,7 +397,7 @@ class _ModeratorApprovalsScreenState extends State<ModeratorApprovalsScreen> {
           ),
           if (_isProcessing)
             Container(
-              color: Colors.black.withOpacity(0.3),
+              color: Colors.black.withValues(alpha: 0.3),
               child: const Center(
                 child: CircularProgressIndicator(),
               ),

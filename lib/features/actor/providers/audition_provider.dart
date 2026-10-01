@@ -238,7 +238,11 @@ class AuditionProvider extends ChangeNotifier {
 
   /// Tüm audition'ları yükle (Admin/Yönetmen/Moderatör)
   /// [projectIds] verilirse sadece o projelere ait auditionlar gelir (moderatör filtresi)
-  Future<void> loadAllAuditions({AuditionStatus? status, List<String>? projectIds}) async {
+  Future<void> loadAllAuditions({
+    AuditionStatus? status,
+    List<AuditionStatus>? statuses,
+    List<String>? projectIds,
+  }) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
@@ -246,6 +250,7 @@ class AuditionProvider extends ChangeNotifier {
     try {
       _auditions = await _service.getAllAuditions(
         status: status,
+        statuses: statuses,
         projectIds: projectIds,
       );
       _isLoading = false;

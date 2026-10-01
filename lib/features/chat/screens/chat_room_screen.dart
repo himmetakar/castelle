@@ -48,7 +48,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
           .snapshots()
           .listen((doc) {
         if (doc.exists && mounted) {
-          final data = doc.data() as Map<String, dynamic>?;
+          final data = doc.data();
           final unreadCount = data?[updateField] ?? 0;
           if (unreadCount > 0) {
             _markAsRead();
@@ -122,7 +122,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
       'text': messageText,
       'createdAt': FieldValue.serverTimestamp(),
       'isRead': false,
-      if (calendarEvent != null) 'calendarEvent': calendarEvent,
+      'calendarEvent': ?calendarEvent,
     });
 
     // Update main chat meta
@@ -203,7 +203,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
-                      value: selectedType,
+                      initialValue: selectedType,
                       dropdownColor: AppTheme.surfaceCard,
                       style: const TextStyle(color: AppTheme.textPrimary),
                       decoration: const InputDecoration(labelText: 'Etkinlik Türü'),

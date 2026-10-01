@@ -1,21 +1,20 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:castelle/core/widgets/web_frame.dart';
+import 'package:castelle/core/utils/video_utils.dart';
 import 'package:castelle/core/utils/platform_utils.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:castelle/core/theme/app_theme.dart';
 import 'package:castelle/core/providers/auth_provider.dart';
 import 'package:castelle/core/models/actor_profile_model.dart';
 import 'package:castelle/features/actor/providers/actor_profile_provider.dart';
 import 'package:castelle/features/actor/widgets/skills_input_widget.dart';
-import 'package:video_player/video_player.dart';
 import 'package:castelle/core/widgets/video_record_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:dio/dio.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:file_picker/file_picker.dart';
 
@@ -571,6 +570,7 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
 
       final String? videoPath;
       if (source == ImageSource.camera) {
+        if (!mounted) return;
         videoPath = await Navigator.push<String>(
           context,
           MaterialPageRoute(
@@ -604,7 +604,7 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
       if (!mounted) return;
 
       // Video yataylık kontrolü
-      final controller = VideoPlayerController.file(File(videoPath));
+      final controller = localVideoController(videoPath);
       await controller.initialize();
       final size = controller.value.size;
       final isLandscape = size.width > size.height;
@@ -632,6 +632,7 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
 
       setState(() => _processingVideoKey = videoKey);
 
+      if (!mounted) return;
       final authProvider = context.read<AuthProvider>();
       final uid = authProvider.user?.uid;
       final provider = context.read<ActorProfileProvider>();
@@ -669,22 +670,6 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
   // HOBİ EKLEME/ÇIKARMA
   // ═══════════════════════════════════════
 
-  void _addHobby(String hobby) {
-    final trimmed = hobby.trim();
-    if (trimmed.isEmpty) return;
-    if (_hobbies.contains(trimmed)) return;
-    setState(() {
-      _hobbies.add(trimmed);
-      _hobbyInputController.clear();
-    });
-  }
-
-  void _removeHobby(String hobby) {
-    setState(() {
-      _hobbies.remove(hobby);
-    });
-  }
-
   // ═══════════════════════════════════════
   // FİLMOGRAFİ EKLEME MODALI
   // ═══════════════════════════════════════
@@ -720,7 +705,7 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
-                      value: selectedType,
+                      initialValue: selectedType,
                       dropdownColor: AppTheme.surfaceCard,
                       style: const TextStyle(color: AppTheme.textPrimary),
                       decoration: const InputDecoration(labelText: 'Proje Türü'),
@@ -808,7 +793,7 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
 
     return PopScope(
       canPop: !_hasUnsavedChanges() || _forceClose,
-      onPopInvoked: (didPop) async {
+      onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
         
         final shouldSave = await _showUnsavedChangesDialog();
@@ -819,6 +804,7 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
             setState(() {
               _forceClose = true;
             });
+            if (!context.mounted) return;
             Navigator.of(context).pop();
           }
         }
@@ -1415,6 +1401,7 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
                   ) ?? false;
                   if (confirmed) {
                     final updatedProfile = profile.copyWith(profilePhotoUrl: '');
+                    if (!mounted) return;
                     final success = await context.read<ActorProfileProvider>().saveProfile(updatedProfile);
                     if (mounted && success) {
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -1457,8 +1444,9 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: (urls.length < 10) ? urls.length + 1 : 10,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 4,
+            gridDelegate: adaptiveGridDelegate(
+              mobileCount: 4,
+              maxExtent: 160,
               mainAxisSpacing: 8,
               crossAxisSpacing: 8,
               childAspectRatio: 0.8,
@@ -1548,59 +1536,6 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
     );
   }
 
-  // HOBİ EDİTÖRÜ
-  Widget _buildHobbiesEditor() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceCard,
-        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        border: Border.all(color: AppTheme.border.withValues(alpha: 0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (_hobbies.isNotEmpty) ...[
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: _hobbies.map((hobi) {
-                return Chip(
-                  label: Text(hobi),
-                  deleteIcon: const Icon(Icons.close, size: 14),
-                  backgroundColor: AppTheme.primary.withValues(alpha: 0.1),
-                  onDeleted: () => _removeHobby(hobi),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 12),
-          ],
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _hobbyInputController,
-                  style: const TextStyle(color: AppTheme.textPrimary),
-                  decoration: const InputDecoration(
-                    hintText: 'Hobi yazın (Örn: Yüzme, Kitap Okumak)',
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                  ),
-                  onSubmitted: _addHobby,
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.add_circle, color: AppTheme.accent),
-                onPressed: () => _addHobby(_hobbyInputController.text),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
   // FİLMOGRAFİ EDİTÖRÜ
   Widget _buildFilmographyEditor(ActorProfileModel? profile) {
     final list = profile?.filmography ?? [];
@@ -1641,7 +1576,7 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: list.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              separatorBuilder: (_, _) => const SizedBox(height: 8),
               itemBuilder: (ctx, index) {
                 final job = list[index];
                 return Container(
@@ -2189,6 +2124,7 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
 
     // 3. İndirme Diyaloğu Göster
     double progress = 0.0;
+    if (!context.mounted) return;
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -2300,7 +2236,7 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
               Expanded(
                 flex: 2,
                 child: DropdownButtonFormField<String>(
-                  value: selectedLevel,
+                  initialValue: selectedLevel,
                   dropdownColor: AppTheme.surfaceCard,
                   style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
                   decoration: const InputDecoration(
@@ -2466,7 +2402,7 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: _projectVideos.length,
-              separatorBuilder: (_, __) => const Divider(height: 16, color: AppTheme.border),
+              separatorBuilder: (_, _) => const Divider(height: 16, color: AppTheme.border),
               itemBuilder: (context, index) {
                 final item = _projectVideos[index];
                 final title = item['title'] ?? 'Proje Videosu';
@@ -2541,7 +2477,7 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
-                      value: selectedType,
+                      initialValue: selectedType,
                       dropdownColor: AppTheme.surfaceCard,
                       style: const TextStyle(color: AppTheme.textPrimary),
                       decoration: const InputDecoration(labelText: 'Proje Türü'),

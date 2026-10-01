@@ -331,6 +331,7 @@ class _VideoRecordScreenState extends State<VideoRecordScreen> with WidgetsBindi
         Navigator.pop(context, file.path);
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Kayıt durdurulamadı: $e'), backgroundColor: AppTheme.error),
       );
@@ -807,7 +808,7 @@ class _VideoRecordScreenState extends State<VideoRecordScreen> with WidgetsBindi
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.9),
+                  color: Colors.red.withValues(alpha: 0.9),
                   borderRadius: BorderRadius.circular(12),
                   boxShadow: const [
                     BoxShadow(
@@ -844,13 +845,13 @@ class _VideoRecordScreenState extends State<VideoRecordScreen> with WidgetsBindi
           if (_isCountingDown && !isPortrait)
             Positioned.fill(
               child: Container(
-                color: Colors.black.withOpacity(0.5),
+                color: Colors.black.withValues(alpha: 0.5),
                 child: Center(
                   child: Container(
                     width: 120,
                     height: 120,
                     decoration: BoxDecoration(
-                      color: AppTheme.accent.withOpacity(0.2),
+                      color: AppTheme.accent.withValues(alpha: 0.2),
                       shape: BoxShape.circle,
                       border: Border.all(color: AppTheme.accent, width: 3),
                     ),

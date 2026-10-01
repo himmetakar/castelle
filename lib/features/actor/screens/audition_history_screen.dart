@@ -17,7 +17,6 @@ import 'package:castelle/core/providers/auth_provider.dart';
 import 'package:castelle/core/providers/notification_provider.dart';
 import 'package:castelle/core/services/audition_service.dart';
 import 'package:castelle/core/services/project_service.dart';
-import 'package:castelle/core/widgets/project_details_bottom_sheet.dart';
 import 'package:castelle/features/actor/screens/audition_submit_screen.dart';
 import 'package:castelle/features/actor/screens/my_audition_detail_screen.dart';
 import 'package:castelle/features/actor/providers/audition_provider.dart';
@@ -60,15 +59,6 @@ class _AuditionHistoryScreenState extends State<AuditionHistoryScreen>
     'Revizyon',       // revision
   ];
 
-  static const _tabStatuses = [
-    AuditionStatus.submitted,
-    AuditionStatus.submitted,   // placeholder — Gerçekte “Gönderildi” tabı, submitted gösterir
-    AuditionStatus.reviewing,
-    AuditionStatus.options,
-    AuditionStatus.approved,
-    AuditionStatus.rejected,
-    AuditionStatus.revision,
-  ];
 
   // Tab indexine göre gerçek status
   static AuditionStatus _statusForTab(int i) {
@@ -790,52 +780,6 @@ class _AuditionHistoryScreenState extends State<AuditionHistoryScreen>
     }
   }
 
-  Future<void> _handleApprovedTap(AuditionModel audition) async {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) =>
-          const Center(child: CircularProgressIndicator(color: AppTheme.accent)),
-    );
-
-    try {
-      final project = await ProjectService().getProject(audition.projectId);
-      if (!mounted) return;
-      Navigator.pop(context); // Close loading indicator
-
-      if (project == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Proje detayları bulunamadı.'),
-              backgroundColor: AppTheme.error,
-            ),
-          );
-        }
-        return;
-      }
-
-      final notifProvider = context.read<NotificationProvider>();
-      final invite = notifProvider.notifications
-          .where((n) => n.type == NotificationType.castingInvite && n.projectId == project.id)
-          .firstOrNull;
-
-      if (mounted) {
-        ProjectDetailsBottomSheet.show(context, project, invite: invite);
-      }
-    } catch (e) {
-      if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Hata: $e'),
-            backgroundColor: AppTheme.error,
-          ),
-        );
-      }
-    }
-  }
-
   Future<void> _handleResubmit(AuditionModel audition) async {
     showDialog(
       context: context,
@@ -892,6 +836,7 @@ class _AuditionHistoryScreenState extends State<AuditionHistoryScreen>
         debugPrint('⚠️ [AuditionHistory] Error fetching budgetFlexible: $e');
       }
 
+      if (!mounted) return;
       await Navigator.push(
         context,
         MaterialPageRoute(
@@ -1006,6 +951,7 @@ class _AuditionHistoryScreenState extends State<AuditionHistoryScreen>
                   backgroundColor: AppTheme.success,
                 ),
               );
+              if (!context.mounted) return;
               Navigator.pop(dialogContext);
             }
           },

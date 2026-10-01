@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:castelle/core/widgets/web_frame.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -25,7 +26,6 @@ import 'package:castelle/features/actor/providers/actor_profile_provider.dart';
 import 'package:castelle/features/actor/providers/audition_provider.dart';
 import 'package:castelle/features/actor/screens/actor_profile_edit_screen.dart';
 import 'package:castelle/features/actor/screens/audition_history_screen.dart';
-import 'package:castelle/features/actor/screens/audition_submit_screen.dart';
 import 'package:castelle/features/actor/screens/casting_invites_screen.dart';
 import 'package:castelle/features/actor/widgets/nda_agreement_dialog.dart';
 
@@ -384,7 +384,9 @@ class _ActorDashboardState extends State<_ActorDashboard> {
     final monthName = DateFormat('MMMM yyyy', 'tr_TR').format(_selectedMonth);
     final selectedDayProjects = _projects.where((p) => _doesProjectMatchDate(p, _selectedDay)).toList();
 
-    return Container(
+    return MaxWidthBox(
+      maxWidth: 440,
+      child: Container(
       decoration: BoxDecoration(
         color: AppTheme.surfaceCard,
         borderRadius: BorderRadius.circular(AppTheme.radiusMd),
@@ -518,8 +520,8 @@ class _ActorDashboardState extends State<_ActorDashboard> {
                                       ? CachedNetworkImage(
                                           imageUrl: proj.primaryImageUrl!,
                                           fit: BoxFit.cover,
-                                          placeholder: (_, __) => Container(color: Colors.grey[300]),
-                                          errorWidget: (_, __, ___) => const Icon(Icons.movie, size: 8, color: Colors.white),
+                                          placeholder: (_, _) => Container(color: Colors.grey[300]),
+                                          errorWidget: (_, _, _) => const Icon(Icons.movie, size: 8, color: Colors.white),
                                         )
                                       : Container(
                                           color: AppTheme.accent,
@@ -585,7 +587,7 @@ class _ActorDashboardState extends State<_ActorDashboard> {
               physics: const NeverScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
               itemCount: selectedDayProjects.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              separatorBuilder: (_, _) => const SizedBox(height: 8),
               itemBuilder: (context, idx) {
                 final project = selectedDayProjects[idx];
                 return GestureDetector(
@@ -611,8 +613,8 @@ class _ActorDashboardState extends State<_ActorDashboard> {
                                 ? CachedNetworkImage(
                                     imageUrl: project.primaryImageUrl!,
                                     fit: BoxFit.cover,
-                                    placeholder: (_, __) => Container(color: Colors.grey[300]),
-                                    errorWidget: (_, __, ___) => Image.asset('assets/images/ana-logo-siyah.png', fit: BoxFit.contain),
+                                    placeholder: (_, _) => Container(color: Colors.grey[300]),
+                                    errorWidget: (_, _, _) => Image.asset('assets/images/ana-logo-siyah.png', fit: BoxFit.contain),
                                   )
                                 : Container(
                                     color: Colors.white,
@@ -675,6 +677,7 @@ class _ActorDashboardState extends State<_ActorDashboard> {
             ),
         ],
       ),
+    ),
     );
   }
 
@@ -1180,7 +1183,7 @@ class _ActorDashboardState extends State<_ActorDashboard> {
             imageWidget = Image.network(
               primaryImageUrl,
               fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) => Image.asset(
+              errorBuilder: (_, _, _) => Image.asset(
                 'assets/images/ana-logo-siyah.png',
                 fit: BoxFit.contain,
               ),
@@ -1189,7 +1192,7 @@ class _ActorDashboardState extends State<_ActorDashboard> {
             imageWidget = Image.file(
               File(primaryImageUrl),
               fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) => Image.asset(
+              errorBuilder: (_, _, _) => Image.asset(
                 'assets/images/ana-logo-siyah.png',
                 fit: BoxFit.contain,
               ),
@@ -1331,330 +1334,6 @@ class _ActorDashboardState extends State<_ActorDashboard> {
     ProjectDetailsBottomSheet.show(context, project, invite: invite);
   }
 
-  Widget _buildRoleItem(ProjectModel project, ProjectRole role, {NotificationModel? invite}) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceLight,
-        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        border: Border.all(color: AppTheme.border.withValues(alpha: 0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                role.roleName,
-                style: GoogleFonts.outfit(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.textPrimary,
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: AppTheme.accent.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  'Kota: ${role.quota}',
-                  style: GoogleFonts.inter(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.accent,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          if (role.description != null && role.description!.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text(
-              role.description!,
-              style: GoogleFonts.inter(
-                fontSize: 12,
-                color: AppTheme.textSecondary,
-                height: 1.4,
-              ),
-            ),
-          ],
-          if (role.auditionNotes != null && role.auditionNotes!.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: AppTheme.primary.withValues(alpha: 0.05),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: AppTheme.primary.withValues(alpha: 0.15)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '🎬 Audition Notu:',
-                    style: GoogleFonts.outfit(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: AppTheme.accent,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    role.auditionNotes!,
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      color: AppTheme.textSecondary,
-                      height: 1.4,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-          const SizedBox(height: 12),
-          // Gereksinimler & Bütçe
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            children: [
-              if (role.ageMin != null || role.ageMax != null)
-                _buildRequirementChip(
-                  Icons.cake_outlined,
-                  role.ageMin != null && role.ageMax != null
-                      ? '${role.ageMin}-${role.ageMax} yaş'
-                      : role.ageMin != null
-                          ? '${role.ageMin}+ yaş'
-                          : '${role.ageMax}- yaş',
-                ),
-              if (role.gender != null)
-                _buildRequirementChip(
-                  Icons.person_outline,
-                  role.gender == 'male'
-                      ? 'Erkek'
-                      : role.gender == 'female'
-                          ? 'Kadın'
-                          : 'Diğer',
-                ),
-              if (role.budget != null)
-                _buildRequirementChip(
-                  Icons.monetization_on_outlined,
-                  'Bütçe: ${role.budget!.toStringAsFixed(0)} ₺',
-                  backgroundColor: AppTheme.success.withValues(alpha: 0.12),
-                  textColor: AppTheme.success,
-                  borderColor: AppTheme.success.withValues(alpha: 0.3),
-                ),
-              if (role.requiredSkills.isNotEmpty)
-                ...role.requiredSkills.map(
-                  (s) => _buildRequirementChip(Icons.star_outline, s),
-                ),
-              if (role.ageMin == null &&
-                  role.ageMax == null &&
-                  role.gender == null &&
-                  role.budget == null &&
-                  role.requiredSkills.isEmpty)
-                _buildRequirementChip(
-                  Icons.info_outline,
-                  'Gereksinim belirtilmedi',
-                ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              Builder(
-                builder: (context) {
-                  final now = DateTime.now();
-                  final today = DateTime(now.year, now.month, now.day);
-                  bool isDeadlinePassed = false;
-                  if (project.deadline != null) {
-                    final deadlineDate = DateTime(project.deadline!.year, project.deadline!.month, project.deadline!.day);
-                    isDeadlinePassed = deadlineDate.isBefore(today);
-                  }
-
-                  return Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: isDeadlinePassed
-                          ? null
-                          : () {
-                              Navigator.pop(context); // Kapat details sheet
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => AuditionSubmitScreen(
-                                    project: project,
-                                    role: role,
-                                    customScript: invite?.data?['auditionScript'],
-                                    budgetFlexible: invite?.data?['budgetFlexible'] as bool? ?? false,
-                                  ),
-                                ),
-                              );
-                            },
-                      icon: Icon(
-                        isDeadlinePassed ? Icons.lock_outline : Icons.videocam_outlined,
-                        size: 18,
-                      ),
-                      label: Text(
-                        isDeadlinePassed ? 'Başvuru Süresi Doldu' : 'Audition Gönder',
-                        style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 13),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: isDeadlinePassed ? AppTheme.textTertiary : AppTheme.accent,
-                        disabledForegroundColor: AppTheme.textTertiary,
-                        side: BorderSide(
-                          color: isDeadlinePassed ? AppTheme.border : AppTheme.accent,
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDetailRow(IconData icon, String label, String value, {Color? valueColor}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Icon(icon, size: 16, color: AppTheme.accent),
-          const SizedBox(width: 8),
-          Text(
-            label,
-            style: GoogleFonts.inter(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: AppTheme.textSecondary,
-            ),
-          ),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              value,
-              style: GoogleFonts.inter(
-                fontSize: 12,
-                color: valueColor ?? AppTheme.textPrimary,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRequirementChip(IconData icon, String text, {Color? backgroundColor, Color? textColor, Color? borderColor}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: backgroundColor ?? AppTheme.primary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-        border: Border.all(
-          color: borderColor ?? AppTheme.primary.withValues(alpha: 0.2),
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 12, color: textColor ?? AppTheme.textTertiary),
-          const SizedBox(width: 4),
-          Text(
-            text,
-            style: GoogleFonts.inter(
-              fontSize: 11,
-              color: textColor ?? AppTheme.textSecondary,
-              fontWeight: backgroundColor != null ? FontWeight.w600 : FontWeight.w400,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildImageGalleryCarousel(BuildContext context, List<String> imageUrls) {
-    return SizedBox(
-      height: 150,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        itemCount: imageUrls.length,
-        itemBuilder: (context, index) {
-          final url = imageUrls[index];
-          return GestureDetector(
-            onTap: () {
-              showDialog(
-                context: context,
-                builder: (context) => Dialog(
-                  backgroundColor: Colors.transparent,
-                  insetPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 20),
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      InteractiveViewer(
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                          child: Image.network(
-                            url,
-                            fit: BoxFit.contain,
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        top: 10,
-                        right: 10,
-                        child: IconButton(
-                          icon: const Icon(Icons.close, color: Colors.white, size: 28),
-                          onPressed: () => Navigator.pop(context),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-            child: Container(
-              width: 220,
-              margin: const EdgeInsets.only(right: 12),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                border: Border.all(color: AppTheme.border, width: 0.5),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(AppTheme.radiusMd - 1),
-                child: Image.network(
-                  url,
-                  fit: BoxFit.cover,
-                  loadingBuilder: (context, child, loadingProgress) {
-                    if (loadingProgress == null) return child;
-                    return const Center(
-                      child: CircularProgressIndicator(color: AppTheme.accent),
-                    );
-                  },
-                  errorBuilder: (context, error, stackTrace) {
-                    return const Center(
-                      child: Icon(Icons.broken_image_outlined, color: AppTheme.textTertiary),
-                    );
-                  },
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
 }
 
 class _ProjectSampleVideoPlayer extends StatefulWidget {
@@ -1728,7 +1407,10 @@ class _ProjectSampleVideoPlayerState extends State<_ProjectSampleVideoPlayer> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MaxWidthBox(maxWidth: 640, child: _buildPlayer(context));
+
+  Widget _buildPlayer(BuildContext context) {
     if (_isLoading) {
       return Container(
         height: 200,
@@ -1905,9 +1587,13 @@ class RichTextRenderer extends StatelessWidget {
         
         String cleanLine = line;
         if (isBullet) {
-          if (trimmed.startsWith('- ')) cleanLine = trimmed.substring(2);
-          else if (trimmed.startsWith('• ')) cleanLine = trimmed.substring(2);
-          else if (trimmed.startsWith('* ')) cleanLine = trimmed.substring(2);
+          if (trimmed.startsWith('- ')) {
+            cleanLine = trimmed.substring(2);
+          } else if (trimmed.startsWith('• ')) {
+            cleanLine = trimmed.substring(2);
+          } else if (trimmed.startsWith('* ')) {
+            cleanLine = trimmed.substring(2);
+          }
         }
 
         final List<TextSpan> spans = [];

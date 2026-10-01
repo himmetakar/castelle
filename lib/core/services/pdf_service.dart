@@ -63,8 +63,6 @@ class PdfService {
 
     final isBioLocked = actor.lockedSections['bio'] == true;
     final isPhysicalLocked = actor.lockedSections['physical'] == true;
-    final isSkillsLocked = actor.lockedSections['skills'] == true;
-    final isHobbiesLocked = actor.lockedSections['hobbies'] == true;
     final isFilmographyLocked = actor.lockedSections['filmography'] == true;
     final isSocialLocked = actor.lockedSections['social'] == true;
 
@@ -178,9 +176,9 @@ class PdfService {
                   ['Yas', actor.age?.toString() ?? 'Belirtilmedi'],
                   ['Boy', actor.heightCm != null ? '${actor.heightCm} cm' : 'Belirtilmedi'],
                   ['Kilo', actor.weightKg != null ? '${actor.weightKg} kg' : 'Belirtilmedi'],
-                  ['Cinsiyet', cleanText(actor.gender?.displayName) ?? 'Belirtilmedi'],
-                  ['Goz Rengi', cleanText(actor.eyeColor?.displayName) ?? 'Belirtilmedi'],
-                  ['Sac Rengi', cleanText(actor.hairColor?.displayName) ?? 'Belirtilmedi'],
+                  ['Cinsiyet', actor.gender?.displayName ?? 'Belirtilmedi'],
+                  ['Goz Rengi', actor.eyeColor?.displayName ?? 'Belirtilmedi'],
+                  ['Sac Rengi', actor.hairColor?.displayName ?? 'Belirtilmedi'],
                 ].map((row) => [cleanText(row[0]), cleanText(row[1])]).toList(),
                 headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
                 cellAlignment: pw.Alignment.centerLeft,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:castelle/core/widgets/web_frame.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -153,7 +154,9 @@ class _CalendarWidgetState extends State<CalendarWidget> {
       );
     }
 
-    return Column(
+    return MaxWidthBox(
+      maxWidth: 440,
+      child: Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -467,6 +470,7 @@ class _CalendarWidgetState extends State<CalendarWidget> {
             );
           }),
       ],
+    ),
     );
   }
 }

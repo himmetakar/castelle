@@ -211,6 +211,33 @@ class ProjectService {
     }
   }
 
+  /// Sonuçlanan projeler: son başvuru tarihi geçmiş, gizli olmayan,
+  /// taslak/iptal olmayan projeler (en yeni bitenden eskiye).
+  ///
+  /// Tek alanlı aralık + aynı alanda sıralama kullanılır; Firestore'un
+  /// otomatik tek alan index'i yeterli, bileşik index gerekmez. `isPrivate`
+  /// ve `status` filtreleri istemcide uygulanır, çünkü eski proje
+  /// dokümanlarında `isPrivate` alanı hiç olmayabilir (eşitlik sorgusu
+  /// onları dışarıda bırakırdı). Silinen projelerin dokümanı kalmadığı için
+  /// sorguya zaten gelmez.
+  Future<List<ProjectModel>> getEndedProjects({int limit = 20}) async {
+    final snapshot = await _firestore
+        .collection(_collection)
+        .where('deadline', isLessThan: Timestamp.now())
+        .orderBy('deadline', descending: true)
+        .limit(limit * 2)
+        .get();
+
+    return snapshot.docs
+        .map((doc) => ProjectModel.fromMap(doc.data(), doc.id))
+        .where((p) =>
+            !p.isPrivate &&
+            p.status != ProjectStatus.draft &&
+            p.status != ProjectStatus.cancelled)
+        .take(limit)
+        .toList();
+  }
+
   /// Proje stream'i (gerçek zamanlı) — Firestore
   Stream<ProjectModel?> streamProject(String projectId) {
     return _firestore

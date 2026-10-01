@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:castelle/core/widgets/web_frame.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:castelle/core/theme/app_theme.dart';
@@ -295,8 +296,9 @@ class _ActorFilterResultsScreenState extends State<ActorFilterResultsScreen> {
       controller: _scrollController,
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
       itemCount: results.length + (provider.hasMore ? 1 : 0),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
+      gridDelegate: adaptiveGridDelegate(
+        mobileCount: 2,
+        maxExtent: 240,
         mainAxisSpacing: 12,
         crossAxisSpacing: 12,
         childAspectRatio: 0.72,

@@ -56,6 +56,7 @@ class _EmployerAuditionsScreenState extends State<EmployerAuditionsScreen> {
     }
 
     // Ayrıca projeye ait auditionları da getir
+    if (!mounted) return;
     final uid = context.read<AuthProvider>().user?.uid;
     if (uid != null) {
       try {
@@ -119,7 +120,7 @@ class _EmployerAuditionsScreenState extends State<EmployerAuditionsScreen> {
                   child: ListView.separated(
                     padding: const EdgeInsets.all(16),
                     itemCount: _items.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    separatorBuilder: (_, _) => const SizedBox(height: 12),
                     itemBuilder: (context, index) =>
                         _buildCard(_items[index], index),
                   ),

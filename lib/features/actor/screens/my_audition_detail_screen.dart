@@ -1,5 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:castelle/core/widgets/web_frame.dart';
+import 'package:castelle/core/utils/platform_utils.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:chewie/chewie.dart';
 import 'package:video_player/video_player.dart';
@@ -65,10 +67,12 @@ class _MyAuditionDetailScreenState extends State<MyAuditionDetailScreen> {
       return;
     }
 
-    final isLocalFile = videoUrl.startsWith('/') ||
-        videoUrl.startsWith('file://') ||
-        videoUrl.contains('/data/') ||
-        videoUrl.contains('/storage/');
+    // Web'de dart:io dosya erişimi yok; yerel yollar orada oynatılamaz
+    final isLocalFile = !kIsWeb &&
+        (videoUrl.startsWith('/') ||
+            videoUrl.startsWith('file://') ||
+            videoUrl.contains('/data/') ||
+            videoUrl.contains('/storage/'));
 
     try {
       if (isLocalFile) {
@@ -420,7 +424,7 @@ class _MyAuditionDetailScreenState extends State<MyAuditionDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildVideoPlayer(),
+            MaxWidthBox(maxWidth: 640, child: _buildVideoPlayer()),
             const SizedBox(height: 16),
             Container(
               width: double.infinity,

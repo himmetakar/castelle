@@ -1,7 +1,5 @@
-import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:castelle/core/models/audition_model.dart';
@@ -16,7 +14,6 @@ class AuditionService {
   static const String _collection = 'auditions';
 
   // Firebase Storage bucket
-  static const _storageBucket = 'castelle-9ab2c.firebasestorage.app';
 
   /// Video'yu Firebase Storage SDK ile güvenli şekilde yükle ve URL döndür
   Future<String> uploadVideo({
@@ -283,53 +280,62 @@ class AuditionService {
   }
 
   /// Tüm audition'ları getir (Admin/Yönetmen/Moderatör)
-  /// [projectIds] verilirse sadece bu projelere ait auditionlar gelir
+  /// [projectIds] verilirse sadece bu projelere ait auditionlar gelir.
+  /// [statuses] verilirse bu durumların birleşimi döner (her durum için ayrı
+  /// eşitlik sorgusu atılır; mevcut projectId+status index'leri yeterli).
   Future<List<AuditionModel>> getAllAuditions({
     AuditionStatus? status,
+    List<AuditionStatus>? statuses,
     int limit = 50,
     List<String>? projectIds,
   }) async {
     try {
-      // Firestore whereIn maks 10 eleman destekliyor
-      // Daha fazla proje varsa birden fazla sorgu + merge gerekir
-      if (projectIds != null && projectIds.isNotEmpty) {
-        final chunks = <List<String>>[];
-        for (var i = 0; i < projectIds.length; i += 10) {
-          chunks.add(projectIds.sublist(
-              i, i + 10 > projectIds.length ? projectIds.length : i + 10));
+      final statusList = statuses ?? (status != null ? [status] : <AuditionStatus?>[null]);
+      final byId = <String, AuditionModel>{};
+      for (final st in statusList) {
+        for (final a in await _queryAuditions(st, limit, projectIds)) {
+          byId[a.id] = a;
         }
-        final results = <AuditionModel>[];
-        for (final chunk in chunks) {
-          Query<Map<String, dynamic>> q = _firestore
-              .collection(_collection)
-              .where('projectId', whereIn: chunk);
-          if (status != null) {
-            q = q.where('status', isEqualTo: status.value);
-          }
-          final snap = await q.limit(limit).get();
-          results.addAll(
-              snap.docs.map((d) => AuditionModel.fromMap(d.data(), d.id)));
-        }
-        results.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-        return results.take(limit).toList();
       }
-
-      Query<Map<String, dynamic>> query = _firestore.collection(_collection);
-      if (status != null) {
-        query = query.where('status', isEqualTo: status.value);
-      }
-      query = query.limit(limit);
-      final snapshot = await query.get();
-      final list = snapshot.docs
-          .map((doc) => AuditionModel.fromMap(doc.data(), doc.id))
-          .toList();
-      list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      return list;
+      final list = byId.values.toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return list.take(limit).toList();
     } catch (e) {
       debugPrint('⚠️ [AuditionService.getAllAuditions] Error: $e');
       // Hatayı yutma: AuditionListScreen hata durumunu (Tekrar Dene) göstersin
       rethrow;
     }
+  }
+
+  Future<List<AuditionModel>> _queryAuditions(
+    AuditionStatus? status,
+    int limit,
+    List<String>? projectIds,
+  ) async {
+    // Firestore whereIn maks 10 eleman destekliyor; fazlası parça parça sorgulanır
+    if (projectIds != null && projectIds.isNotEmpty) {
+      final results = <AuditionModel>[];
+      for (var i = 0; i < projectIds.length; i += 10) {
+        final chunk = projectIds.sublist(
+            i, i + 10 > projectIds.length ? projectIds.length : i + 10);
+        Query<Map<String, dynamic>> q = _firestore
+            .collection(_collection)
+            .where('projectId', whereIn: chunk);
+        if (status != null) {
+          q = q.where('status', isEqualTo: status.value);
+        }
+        final snap = await q.limit(limit).get();
+        results.addAll(snap.docs.map((d) => AuditionModel.fromMap(d.data(), d.id)));
+      }
+      return results;
+    }
+
+    Query<Map<String, dynamic>> query = _firestore.collection(_collection);
+    if (status != null) {
+      query = query.where('status', isEqualTo: status.value);
+    }
+    final snapshot = await query.limit(limit).get();
+    return snapshot.docs.map((doc) => AuditionModel.fromMap(doc.data(), doc.id)).toList();
   }
 
 
