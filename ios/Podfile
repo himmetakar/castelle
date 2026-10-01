@@ -39,5 +39,17 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
+
+    # permission_handler: iOS'ta kullanılan izinler burada açılmazsa
+    # Permission.camera/microphone.request() izin penceresi göstermeden
+    # doğrudan "reddedildi" döner ve kamera ekranı açılmaz.
+    target.build_configurations.each do |config|
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= [
+        '$(inherited)',
+        'PERMISSION_CAMERA=1',
+        'PERMISSION_MICROPHONE=1',
+        'PERMISSION_PHOTOS=1',
+      ]
+    end
   end
 end

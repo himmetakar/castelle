@@ -68,6 +68,8 @@ class _VideoRecordScreenState extends State<VideoRecordScreen> with WidgetsBindi
 
   // Hata durumları
   String? _errorMessage;
+  bool _permissionBlocked = false; // iOS: izin Ayarlar'dan açılmalı
+  CameraDescription? _lastCamera;
 
   // Arka plan sesi
   AudioPlayer? _audioPlayer;
@@ -134,16 +136,35 @@ class _VideoRecordScreenState extends State<VideoRecordScreen> with WidgetsBindi
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final CameraController? cameraController = _controller;
 
+    // Ayarlar'dan izin verip geri dönüldüyse kamerayı yeniden başlat
+    if (state == AppLifecycleState.resumed && _errorMessage != null) {
+      setState(() => _errorMessage = null);
+      _initCamera();
+      return;
+    }
+
+    // Kamera kapatılmışsa geri dönüşte son seçilen kamerayla yeniden aç
+    if (state == AppLifecycleState.resumed &&
+        cameraController == null &&
+        _lastCamera != null) {
+      _onCameraSelected(_lastCamera!);
+      return;
+    }
+
     // App arka plana gidince kamerayı durdur/temizle
     if (cameraController == null || !cameraController.value.isInitialized) {
       return;
     }
 
     if (state == AppLifecycleState.inactive) {
+      // Kapatılmış controller'ı CameraPreview'a vermemek için önce ekrandan kaldır
+      _lastCamera = cameraController.description;
+      setState(() {
+        _controller = null;
+        _isCameraInitialized = false;
+      });
       cameraController.dispose();
       _audioPlayer?.stop();
-    } else if (state == AppLifecycleState.resumed) {
-      _onCameraSelected(cameraController.description);
     }
   }
 
@@ -151,13 +172,24 @@ class _VideoRecordScreenState extends State<VideoRecordScreen> with WidgetsBindi
     // İzin kontrolleri
     final cameraStatus = await Permission.camera.request();
     final micStatus = await Permission.microphone.request();
+    if (!mounted) return;
 
     if (!cameraStatus.isGranted || !micStatus.isGranted) {
+      // iOS izin penceresini yalnızca bir kez gösterir; sonrasında izin
+      // sadece Ayarlar'dan açılabilir.
+      final blocked = cameraStatus.isPermanentlyDenied ||
+          micStatus.isPermanentlyDenied ||
+          cameraStatus.isRestricted ||
+          micStatus.isRestricted;
       setState(() {
-        _errorMessage = 'Kamera ve mikrofon izinleri gereklidir.';
+        _permissionBlocked = blocked;
+        _errorMessage = blocked
+            ? 'Kamera veya mikrofon izni kapalı.\nAyarlar > Castelle bölümünden Kamera ve Mikrofon iznini açın.'
+            : 'Kamera ve mikrofon izinleri gereklidir.';
       });
       return;
     }
+    _permissionBlocked = false;
 
     try {
       _cameras = await availableCameras();
@@ -187,6 +219,7 @@ class _VideoRecordScreenState extends State<VideoRecordScreen> with WidgetsBindi
   }
 
   Future<void> _onCameraSelected(CameraDescription cameraDescription) async {
+    _lastCamera = cameraDescription;
     if (_controller != null) {
       await _controller!.dispose();
     }
@@ -763,10 +796,18 @@ class _VideoRecordScreenState extends State<VideoRecordScreen> with WidgetsBindi
                   style: GoogleFonts.inter(color: Colors.white, fontSize: 14),
                 ),
                 const SizedBox(height: 24),
-                ElevatedButton(
+                if (_permissionBlocked) ...[
+                  ElevatedButton.icon(
+                    onPressed: openAppSettings,
+                    icon: const Icon(Icons.settings),
+                    label: const Text('Ayarları Aç'),
+                    style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accent),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                TextButton(
                   onPressed: () => Navigator.pop(context),
-                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accent),
-                  child: const Text('Geri Dön'),
+                  child: const Text('Geri Dön', style: TextStyle(color: Colors.white70)),
                 ),
               ],
             ),
