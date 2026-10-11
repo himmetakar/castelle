@@ -1,105 +1,380 @@
 rules_version = '2';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Castelle — Firestore Güvenlik Kuralları
+//
+// ÖNCEKİ SÜRÜMDEKİ KRİTİK AÇIK: giriş yapmış HER kullanıcı her kullanıcının
+// belgesini (rol dahil) değiştirebiliyor, projeleri/başvuruları/sohbetleri
+// silebiliyor ve tüm sohbetleri okuyabiliyordu. Bir oyuncu kendi "role"
+// alanını "admin" yaparak uygulamanın yönetimini ele geçirebiliyordu.
+//
+// Bu sürümde:
+//  • Rol / onay / veli onayı / moderatör yetkisi alanlarını yalnızca admin
+//    (moderatör kısmen) değiştirebilir. Kullanıcı kendini admin yapamaz.
+//  • Otomatik admin yetkisi sadece listedeki e-postaya sahip ve e-postası
+//    DOĞRULANMIŞ hesaplara verilir.
+//  • Başvurular sadece sahibi oyuncu + admin/moderatör tarafından görülebilir.
+//  • Sohbetleri sadece taraflar görebilir.
+//  • Bildirimleri sadece alıcısı okuyabilir; oyuncular yalnızca yetkililere
+//    bildirim gönderebilir (push spam / sahte "casting daveti" engeli).
+//  • Hassas alanlar (telefon, e-posta, IBAN, veli bilgisi, doğum tarihi...)
+//    users/{uid}/private altında, sadece sahibi + admin/moderatör okuyabilir.
+//
+// 02.10.2026: Yeni Google kullanıcılarının "permission-denied" hatası
+// düzeltildi (users okuma kuralına kendi e-postasıyla arama izni eklendi).
+// 02.10.2026: Oyuncu Havuzu için role == 'actor' listelemesi açıldı; gizli
+// oyuncular "actor_hidden" rolünde tutulur (functions/index.js).
+//
+// DEPLOY:  firebase deploy --only firestore:rules
+// ═══════════════════════════════════════════════════════════════════════════
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ═══════════════════════════════════════
-    // YARDIMCI FONKSİYONLAR
-    // ═══════════════════════════════════════
-
-    // Giriş yapmış mı?
+    // ───────────────────────── Yardımcılar ─────────────────────────
     function isSignedIn() {
       return request.auth != null;
     }
 
-    // Kendi belgesi mi?
+    function uid() {
+      return request.auth.uid;
+    }
+
     function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
+      return isSignedIn() && uid() == userId;
     }
 
-    // Admin veya moderatör mü? (rol users/{uid} dokümanından okunur)
-    function isAdminOrModerator() {
-      return isSignedIn() &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'moderator'];
+    function myDocPath() {
+      return /databases/$(database)/documents/users/$(uid());
     }
 
-    // ═══════════════════════════════════════
-    // USERS KOLEKSİYONU
-    // ═══════════════════════════════════════
+    function hasProfile() {
+      return isSignedIn() && exists(myDocPath());
+    }
+
+    function isAdmin() {
+      return hasProfile() && get(myDocPath()).data.role == 'admin';
+    }
+
+    // Admin veya moderatör (panel yetkilileri)
+    function isStaff() {
+      return hasProfile() && get(myDocPath()).data.role in ['admin', 'moderator'];
+    }
+
+    function myData() {
+      return get(myDocPath()).data;
+    }
+
+    // Moderatör alt yetkisi (Admin → Moderatör Atama ekranındaki anahtarlar).
+    // Uygulamadaki UserModel.hasModeratorPermission ile aynı mantık:
+    // tamYetki her şeyi, auditionTamYetki "audition*" yetkilerini kapsar.
+    function modPerm(p) {
+      let perms = myData().get('moderatorPermissions', null);
+      return perms is map && (
+        perms.get('tamYetki', false) == true
+        || (p.matches('audition.*') && perms.get('auditionTamYetki', false) == true)
+        || perms.get(p, false) == true
+      );
+    }
+
+    // Admin her zaman; moderatör sadece ilgili yetkisi açıksa
+    function can(p) {
+      return isAdmin() || (isStaff() && modPerm(p));
+    }
+
+    // "Admin onayına sun" modundaki moderatör, başvuru durumunu doğrudan
+    // değiştiremez / silemez; moderator_approvals üzerinden talep açar.
+    function needsAdminApproval() {
+      let perms = myData().get('moderatorPermissions', null);
+      return !isAdmin() && perms is map && perms.get('approvalMode', 'neutral') == 'admin';
+    }
+
+    function isStaffUser(userId) {
+      return exists(/databases/$(database)/documents/users/$(userId))
+        && get(/databases/$(database)/documents/users/$(userId)).data.role in ['admin', 'moderator'];
+    }
+
+    // Uygulama kodundaki AuthService.designatedAdmins listesi ile aynı olmalı.
+    // E-posta doğrulanmamış bir hesap bu listedeki bir adresle kayıt olsa
+    // bile admin olamaz.
+    function isDesignatedAdmin() {
+      return isSignedIn()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.lower() in [
+          'casttelleyazilim@gmail.com',
+          'castelleapp@gmail.com'
+        ];
+    }
+
+    function newVal(key) {
+      return request.resource.data.get(key, null);
+    }
+
+    function oldVal(key) {
+      return resource.data.get(key, null);
+    }
+
+    function changed(keys) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasAny(keys);
+    }
+
+    function onlyChanged(keys) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
+    }
+
+    // ───────────────────────── USERS ─────────────────────────
     match /users/{userId} {
-      // Giriş yapmış her kullanıcı profilleri okuyabilir (oyuncu, işveren, yönetmen, admin vb.)
-      allow read: if isSignedIn();
 
-      // Kayıt sırasında kendi profillerini oluşturabilirler
-      allow create: if isOwner(userId) || isSignedIn();
+      // Oyuncu havuzu için oturumlu kullanıcılar oyuncu profillerini görebilir;
+      // ancak gizli profiller (18 yaş altı / veli onayı bekleyen / kendini
+      // gizleyen) yalnızca sahibine ve yetkililere açıktır.
+      allow read: if isSignedIn() && (
+        isOwner(userId)
+        || isStaff()
+        || resource.data.role in ['admin', 'moderator']
+        || resource.data.isHidden == false
+        // Google ile ilk girişte uygulama, kendi e-postasıyla eşleşen eski
+        // kaydı arar. Sadece Google'ın doğruladığı KENDİ e-postası aranabilir.
+        || (request.auth.token.email_verified == true
+            && resource.data.email == request.auth.token.email)
+      );
 
-      // Kendi profilini veya yetkili işlemleri güncelleyebilir
-      allow update, delete: if isOwner(userId) || isSignedIn();
+      // Oyuncu Havuzu (mağazadaki sürüm `where role == 'actor'` sorgular).
+      // Gizli oyuncuların rolü "actor_hidden" tutulur (Cloud Function:
+      // syncActorVisibility), bu yüzden role == 'actor' olan herkes zaten
+      // gizli değildir.
+      allow list: if isSignedIn() && resource.data.role == 'actor';
 
-      // Hassas alanlar: telefon, veli telefonu, IBAN, hesap sahibi adı.
-      // Sadece sahibi ve admin/moderatör okur/yazar.
+      // Kayıt: kullanıcı yalnızca KENDİ belgesini, "oyuncu" rolüyle ve
+      // onaylanmamış olarak oluşturabilir.
+      allow create: if isAdmin() || (
+        isOwner(userId)
+        && (newVal('role') == 'actor' || (newVal('role') == 'admin' && isDesignatedAdmin()))
+        && (isDesignatedAdmin() || !(newVal('approvalStatus') in ['approved', 'rejected']))
+        && newVal('moderatorPermissions') == null
+        && (newVal('isUnder18') != true
+            || (newVal('isGuardianApproved') != true && newVal('guardianApprovalStatus') != 'approved'))
+      );
+
+      allow update: if isAdmin()
+        || (isStaff() && !isOwner(userId) && staffUpdateOk())
+        || (isOwner(userId) && ownerUpdateOk());
+
+      allow delete: if isOwner(userId) || isAdmin()
+        || (can('oyuncuSilme') && resource.data.role in ['actor', 'actor_hidden']);
+
+      // Moderatör: oyuncuları onaylayabilir/dondurabilir; rol ve moderatör
+      // yetkilerini değiştiremez, admin/moderatör hesaplarına dokunamaz.
+      function staffUpdateOk() {
+        return !(oldVal('role') in ['admin', 'moderator'])
+          && !changed(['moderatorPermissions'])
+          // Rol değişmez; sadece actor ↔ actor_hidden (görünürlük) geçişi serbest
+          && (!changed(['role'])
+              || (oldVal('role') in ['actor', 'actor_hidden'] && newVal('role') in ['actor', 'actor_hidden']));
+      }
+
+      // Kullanıcının kendi belgesinde yapabilecekleri
+      function ownerUpdateOk() {
+        return (!changed(['uid']) || newVal('uid') == userId)
+          // Rol: yükseltme yok (listedeki doğrulanmış admin e-postası hariç)
+          && (!changed(['role'])
+              || newVal('role') == 'actor'
+              || (newVal('role') == 'admin' && isDesignatedAdmin()))
+          && !changed(['moderatorPermissions', 'approvedAt', 'rejectedAt'])
+          // 05.10.2026: Mağazadaki iOS sürümü her profil kaydında `adminNote: null`
+          // gönderiyor; bu "değişiklik" sayılıp kayıt reddediliyordu (uygulama hatayı
+          // yutup yerelde kaydedilmiş gibi gösteriyordu). Boş -> boş geçişe izin ver;
+          // gerçek bir yönetici notu yazılamaz / silinemez.
+          && (!changed(['adminNote'])
+              || (newVal('adminNote') in [null, ''] && oldVal('adminNote') in [null, '']))
+          // 06.10.2026: Onaylanmış hesap, eski bir profil kopyasıyla kaydedilip
+          // "pending"e geri döndürülemez (admin onayı ezilmesin). Tek istisna:
+          // hesap silme akışı (isActive=false yazar).
+          && (!changed(['approvalStatus'])
+              || oldVal('approvalStatus') != 'approved'
+              || newVal('isActive') == false)
+          // Onay durumu: kendini onaylayamaz / reddedilmiş gösteremez
+          && (!changed(['approvalStatus'])
+              || !(newVal('approvalStatus') in ['approved', 'rejected'])
+              || (newVal('approvalStatus') == 'approved' && isDesignatedAdmin()))
+          // Hesabı dondurulmuş kullanıcı kendini aktifleştiremez
+          && (!changed(['isActive'])
+              || newVal('isActive') == false
+              || oldVal('approvalStatus') != 'rejected')
+          // Veli onayını kendisi veremez
+          && (!changed(['isGuardianApproved']) || newVal('isGuardianApproved') != true)
+          && (!changed(['guardianApprovalStatus']) || newVal('guardianApprovalStatus') != 'approved')
+          // 18 yaş altı olarak işaretlenmiş hesap kendini yetişkin yapamaz
+          && (!changed(['isUnder18']) || newVal('isUnder18') == true || oldVal('isUnder18') != true)
+          // E-posta doğrulama zorunluluğunu kaldıramaz
+          && (!changed(['emailVerificationRequired']) || newVal('emailVerificationRequired') == true)
+          // Veli onayı olmayan 18 yaş altı profil herkese açılamaz
+          && (!changed(['isHidden'])
+              || newVal('isHidden') == true
+              || !(newVal('isUnder18') == true && newVal('isGuardianApproved') != true));
+      }
+
+      // Hassas alanlar (telefon, e-posta, IBAN, veli bilgileri, doğum tarihi…)
       match /private/{docId} {
-        allow read, write: if isOwner(userId) || isAdminOrModerator();
+        allow read, write: if isOwner(userId) || isStaff();
       }
     }
 
-    // ═══════════════════════════════════════
-    // PROJECTS KOLEKSİYONU
-    // ═══════════════════════════════════════
+    // Uygulama yapılandırması (zorunlu güncelleme vb.). Giriş öncesi de
+    // okunabilmeli; yalnızca admin yazar.
+    match /config/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Admin kullanıcı listesinde e-posta/telefon gösterimi için
+    match /{path=**}/private/{docId} {
+      allow read: if isStaff();
+    }
+
+    // ───────────────────────── PROJECTS ─────────────────────────
+    // "Gizli proje" (isPrivate) önceden herkese görünüyordu. Artık yalnızca
+    // yetkililer ve davet edilen oyuncular (invitedActorIds) açabilir.
     match /projects/{projectId} {
-      allow read, create, update, delete: if isSignedIn();
+      allow read: if isStaff() || (isSignedIn() && (
+        !('isPrivate' in resource.data)
+        || resource.data.isPrivate == false
+        || uid() in resource.data.get('invitedActorIds', [])
+      ));
+      // Moderatör yetkileri: projeOlusturma / duzenlemeYetkisi / silmeYetkisi.
+      // Audition talebi gönderen (auditionToplama) sadece davetli listesini günceller.
+      allow create: if can('projeOlusturma');
+      allow update: if can('duzenlemeYetkisi')
+        || (can('auditionToplama') && onlyChanged(['invitedActorIds']));
+      allow delete: if can('silmeYetkisi');
     }
 
-    // ═══════════════════════════════════════
-    // AUDITIONS KOLEKSİYONU
-    // ═══════════════════════════════════════
+    // ───────────────────────── AUDITIONS ─────────────────────────
     match /auditions/{auditionId} {
-      allow read, create, update, delete: if isSignedIn();
+      allow read: if isStaff() || (isSignedIn() && resource.data.actorId == uid());
+
+      // Oyuncu yalnızca kendi adına, "Gönderildi" durumunda başvuru açabilir
+      allow create: if isStaff() || (
+        isSignedIn()
+        && request.resource.data.actorId == uid()
+        && request.resource.data.status == 'submitted'
+        && newVal('isDeleted') != true
+        && newVal('reviewerId') == null
+      );
+
+      allow update: if isAdmin()
+        || (isStaff() && staffAuditionUpdateOk())
+        || (isSignedIn() && resource.data.actorId == uid() && actorAuditionUpdateOk());
+
+      // Moderatör: durum değişikliği ve silme/geri yükleme ilgili alt yetkiye
+      // bağlı. "İnceleniyor"a alma (PDF/profil indirilince) herkese açık.
+      function staffAuditionUpdateOk() {
+        let newStatus = request.resource.data.get('status', null);
+        return (!changed(['status'])
+            || newStatus == 'reviewing'
+            || (!needsAdminApproval() && (
+                 (newStatus in ['approved', 'rejected'] && can('auditionOnaylama'))
+                 || (newStatus == 'revision' && can('auditionRevizeIsteme'))
+                 || (newStatus == 'options' && (can('auditionOnaylama') || can('auditionDurumSecme')))
+                 || (newStatus == 'submitted' && can('auditionDurumSecme'))
+               )))
+          && (!changed(['isDeleted', 'deletedAt', 'deletedById', 'deletedByName'])
+              || (can('auditionSilme') && !needsAdminApproval()));
+      }
+
+      // Kalıcı silme sadece admin (panel "Silinenler" ile yumuşak siler)
+      allow delete: if isAdmin();
+
+      // Oyuncu: opsiyon yanıtı verebilir, revize istenen başvuruya yeni video
+      // yükleyebilir. Durumu kendisi "onaylandı" vb. yapamaz, silinmiş/yorum
+      // alanlarına dokunamaz.
+      function actorAuditionUpdateOk() {
+        return !changed([
+            'actorId', 'actorName', 'projectId', 'projectTitle', 'roleName',
+            'isDeleted', 'deletedAt', 'deletedById', 'deletedByName', 'projectDeleted',
+            'reviewerId', 'reviewerName', 'reviewerNote', 'reviewedAt',
+            'optionStartDate', 'optionEndDate', 'optionQuestions',
+            'originalBudget', 'revisionRequestedAt', 'createdAt'
+          ])
+          && (!changed(['status'])
+              || (resource.data.status == 'revision' && request.resource.data.status == 'submitted'))
+          && (!changed(['videoUrl', 'previousVersions'])
+              || (resource.data.status == 'revision' && request.resource.data.status == 'submitted'));
+      }
     }
 
-    // ═══════════════════════════════════════
-    // NOTIFICATIONS KOLEKSİYONU
-    // ═══════════════════════════════════════
+    // ───────────────────────── NOTIFICATIONS ─────────────────────────
     match /notifications/{notificationId} {
-      allow read, create, update, delete: if isSignedIn();
+      allow read: if isStaff() || (isSignedIn() && resource.data.recipientId == uid());
+
+      // Oyuncular yalnızca kendilerine veya yetkililere bildirim oluşturabilir,
+      // başkası adına gönderemez ve "casting daveti" oluşturamaz.
+      allow create: if (isStaff() && (newVal('type') != 'casting_invite' || can('auditionToplama'))) || (
+        isSignedIn()
+        && newVal('senderId') in [null, uid()]
+        && newVal('type') != 'casting_invite'
+        && (request.resource.data.recipientId == uid()
+            || isStaffUser(request.resource.data.recipientId))
+      );
+
+      allow update: if isStaff()
+        || (isSignedIn() && resource.data.recipientId == uid() && onlyChanged(['isRead', 'readAt']));
+
+      allow delete: if isStaff() || (isSignedIn() && resource.data.recipientId == uid());
     }
 
-    // ═══════════════════════════════════════
-    // SKILLS KOLEKSİYONU
-    // ═══════════════════════════════════════
-    match /skills/{skillId} {
-      allow read, write: if isSignedIn();
-    }
-
-    // ═══════════════════════════════════════
-    // MODERATOR APPROVALS KOLEKSİYONU
-    // ═══════════════════════════════════════
-    match /moderator_approvals/{approvalId} {
-      allow read, write: if isSignedIn();
-    }
-
-    // ═══════════════════════════════════════
-    // CHATS KOLEKSİYONU & MESSAGES SUBCOLLECTION
-    // ═══════════════════════════════════════
+    // ───────────────────────── CHATS ─────────────────────────
+    // chatId = iki tarafın uid'sinin alt çizgiyle birleşimi
     match /chats/{chatId} {
-      allow read, write: if isSignedIn();
+      function inChat() {
+        return isSignedIn() && uid() in chatId.split('_');
+      }
+
+      allow read: if isSignedIn() && (
+        resource.data.actorId == uid()
+        || resource.data.adminId == uid()
+        || inChat()
+      );
+      allow create, update: if inChat();
+      allow delete: if isAdmin();
 
       match /messages/{messageId} {
-        allow read, write: if isSignedIn();
+        allow read: if inChat();
+        allow create: if inChat() && request.resource.data.senderId == uid();
+        allow update: if inChat() && onlyChanged(['isRead', 'readAt']);
+        allow delete: if isAdmin();
       }
     }
 
-    // ═══════════════════════════════════════
-    // CALENDAR EVENTS KOLEKSİYONU
-    // ═══════════════════════════════════════
+    // ───────────────────────── CALENDAR ─────────────────────────
     match /calendar_events/{eventId} {
-      allow read, write: if isSignedIn();
+      allow read: if isStaff() || (isSignedIn() && resource.data.recipientId == uid());
+      allow create, update, delete: if isStaff();
     }
 
-    // ═══════════════════════════════════════
-    // SETTINGS KOLEKSİYONU
-    // ═══════════════════════════════════════
+    // ───────────────────────── MODERATÖR ONAYLARI ─────────────────────────
+    // Moderatör kendi adına talep açar; talebi yalnızca admin onaylar/reddeder.
+    match /moderator_approvals/{approvalId} {
+      allow read: if isStaff();
+      allow create: if isStaff() && newVal('moderatorId') == uid();
+      allow update, delete: if isAdmin();
+    }
+
+    // ───────────────────────── AYARLAR ─────────────────────────
     match /settings/{settingId} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ───────────────────────── YETENEKLER ─────────────────────────
+    match /skills/{skillId} {
+      allow read, create: if isSignedIn();
+      allow update, delete: if isStaff();
+    }
+
+    // Tanımlanmamış tüm koleksiyonlar kapalı
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

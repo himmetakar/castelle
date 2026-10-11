@@ -1,14 +1,13 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:castelle/core/services/media_upload.dart';
-import 'package:castelle/core/utils/platform_utils.dart';
+import 'package:castelle/core/utils/media_upload.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:chewie/chewie.dart';
-import 'package:video_player/video_player.dart';
 import 'package:castelle/core/theme/app_theme.dart';
+import 'package:castelle/core/widgets/app_video_player.dart';
+import 'package:castelle/features/admin/screens/actor_history_screen.dart';
 import 'package:castelle/core/models/audition_model.dart';
 import 'package:castelle/core/providers/auth_provider.dart';
 import 'package:castelle/features/actor/providers/audition_provider.dart';
@@ -25,6 +24,7 @@ import 'package:castelle/core/services/notification_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:castelle/core/models/project_model.dart';
 import 'package:castelle/core/services/project_service.dart';
+import 'package:castelle/core/utils/platform_utils.dart';
 
 /// Castelle - Audition İzleme ve İnceleme Ekranı
 /// Değerlendirme ekranı - Yönlendirme, onay, ret işlevleri
@@ -52,19 +52,14 @@ class AuditionReviewScreen extends StatefulWidget {
 }
 
 class _AuditionReviewScreenState extends State<AuditionReviewScreen> {
-  VideoPlayerController? _videoController;
-  ChewieController? _chewieController;
   final _noteController = TextEditingController();
-  bool _isVideoLoading = true;
   ActorProfileModel? _actorProfile;
   bool _isLoadingProfile = false;
-  String? _videoError;
 
   @override
   void initState() {
     super.initState();
     _noteController.text = widget.audition.reviewerNote ?? '';
-    _initVideo();
     _loadActorProfile();
   }
 
@@ -86,146 +81,8 @@ class _AuditionReviewScreenState extends State<AuditionReviewScreen> {
     }
   }
 
-  Future<void> _initVideo() async {
-    var videoUrl = widget.audition.videoUrl;
-    debugPrint('🎬 [Video Init] Başlıyor. URL: "$videoUrl"');
-
-    // Firebase Storage URL'sindeki slash karakterlerini %2F yapacak şekilde düzelt (eski kayıtlar için)
-    if (videoUrl.startsWith('http') && videoUrl.contains('/o/')) {
-      final oIndex = videoUrl.indexOf('/o/');
-      final queryIndex = videoUrl.indexOf('?', oIndex);
-      final baseUrl = videoUrl.substring(0, oIndex + 3);
-      final queryParams = queryIndex != -1 ? videoUrl.substring(queryIndex) : '';
-      final rawPath = queryIndex != -1 
-          ? videoUrl.substring(oIndex + 3, queryIndex) 
-          : videoUrl.substring(oIndex + 3);
-      
-      if (rawPath.contains('/') && !rawPath.contains('%2F')) {
-        final encodedPath = Uri.encodeComponent(rawPath);
-        videoUrl = '$baseUrl$encodedPath$queryParams';
-        debugPrint('🔧 [Video URL Düzeltildi]: $videoUrl');
-      }
-    }
-
-    if (videoUrl.isEmpty) {
-      setState(() {
-        _isVideoLoading = false;
-        _videoError = 'Video URL bulunamadı. Audition kaydında video bilgisi eksik.';
-      });
-      return;
-    }
-
-    // Yerel dosya mı?
-    // Web'de dart:io dosya erişimi yok; yerel yollar orada geçersiz adres sayılır
-    final isLocalFile = !kIsWeb && (videoUrl.startsWith('/')
-        || videoUrl.startsWith('file://')
-        || videoUrl.contains('/data/')
-        || videoUrl.contains('/storage/'));
-
-    if (isLocalFile) {
-      final cleanPath = videoUrl.replaceFirst(RegExp(r'^file://'), '');
-      final file = File(cleanPath);
-      final exists = await file.exists();
-      debugPrint('📂 [Video] Yerel dosya: "$cleanPath" | Mevcut: $exists');
-
-      if (!exists) {
-        setState(() {
-          _isVideoLoading = false;
-          _videoError = 'Video dosyası cihazda bulunamadı.\n\nDosya adı: ${cleanPath.split('/').last}';
-        });
-        return;
-      }
-
-      final fileSize = await file.length();
-      debugPrint('📏 [Video] Dosya boyutu: ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB');
-
-      // Yöntem 1: VideoPlayerController.file()
-      try {
-        _videoController = VideoPlayerController.file(file);
-        await _videoController!.initialize();
-        debugPrint('✅ [Video] file() yöntemi başarılı.');
-      } catch (e1) {
-        debugPrint('⚠️ [Video] file() başarısız: $e1 → networkUrl(Uri.file()) deneniyor...');
-        _videoController?.dispose();
-        _videoController = null;
-
-        // Yöntem 2: networkUrl ile file:// URI
-        try {
-          _videoController = VideoPlayerController.networkUrl(Uri.file(cleanPath));
-          await _videoController!.initialize();
-          debugPrint('✅ [Video] networkUrl(Uri.file()) yöntemi başarılı.');
-        } catch (e2) {
-          debugPrint('❌ [Video] Her iki yöntem de başarısız. Hata: $e2');
-          _videoController?.dispose();
-          _videoController = null;
-          setState(() {
-            _isVideoLoading = false;
-            _videoError = 'Video oynatılamadı.\n\n'
-                'Dosya: ${cleanPath.split('/').last}\n'
-                'Boyut: ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB\n'
-                'Hata: $e2';
-          });
-          return;
-        }
-      }
-    } else if (videoUrl.startsWith('http')) {
-      debugPrint('🌐 [Video] Ağ URL\'si: $videoUrl');
-      try {
-        _videoController = VideoPlayerController.networkUrl(Uri.parse(videoUrl));
-        await _videoController!.initialize();
-        debugPrint('✅ [Video] Ağ video başarıyla yüklendi.');
-      } catch (e) {
-        debugPrint('❌ [Video] Ağ video hatası: $e');
-        _videoController?.dispose();
-        _videoController = null;
-        setState(() {
-          _isVideoLoading = false;
-          _videoError = 'Video sunucudan yüklenemedi.\n\nHata: $e';
-        });
-        return;
-      }
-    } else {
-      setState(() {
-        _isVideoLoading = false;
-        _videoError = 'Geçersiz video adresi:\n$videoUrl';
-      });
-      return;
-    }
-
-    // Controller başarıyla init edildi
-    debugPrint('🎉 [Video] Hazır! '
-        'Boyut: ${_videoController!.value.size}, '
-        'Süre: ${_videoController!.value.duration.inSeconds}s, '
-        'En-Boy: ${_videoController!.value.aspectRatio.toStringAsFixed(2)}');
-
-    _chewieController = ChewieController(
-      videoPlayerController: _videoController!,
-      autoPlay: false,
-      looping: false,
-      aspectRatio: _videoController!.value.aspectRatio,
-      allowFullScreen: true,
-      placeholder: Container(
-        color: AppTheme.surfaceLight,
-        child: const Center(
-          child: CircularProgressIndicator(color: AppTheme.accent),
-        ),
-      ),
-      materialProgressColors: ChewieProgressColors(
-        playedColor: AppTheme.accent,
-        handleColor: AppTheme.accent,
-        backgroundColor: AppTheme.surfaceElevated,
-        bufferedColor: AppTheme.primary.withValues(alpha: 0.3),
-      ),
-    );
-
-    setState(() => _isVideoLoading = false);
-  }
-
-
   @override
   void dispose() {
-    _chewieController?.dispose();
-    _videoController?.dispose();
     _noteController.dispose();
     super.dispose();
   }
@@ -332,13 +189,18 @@ class _AuditionReviewScreenState extends State<AuditionReviewScreen> {
       return;
     }
 
-    // Web'de klasör seçimi ve dart:io dosya yazma desteklenmiyor
+    // Web: klasör oluşturup PDF/fotoğraf kaydetmek desteklenmez (dart:io yok).
+    // Audition videosunu yeni sekmede açarız; kullanıcı tarayıcıdan kaydeder.
     if (kIsWeb) {
+      final url = widget.audition.videoUrl;
+      final opened = url.isNotEmpty && await MediaUpload.openInBrowser(url);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Klasöre indirme web sürümünde desteklenmiyor. Lütfen mobil uygulamayı kullanın.'),
-            backgroundColor: AppTheme.warning,
+          SnackBar(
+            content: Text(opened
+                ? 'Video yeni sekmede açıldı. Tarayıcıdan kaydedebilirsiniz. (Klasörlü toplu indirme sadece mobil uygulamada.)'
+                : 'Video açılamadı.'),
+            backgroundColor: opened ? AppTheme.info : AppTheme.error,
           ),
         );
       }
@@ -651,6 +513,52 @@ class _AuditionReviewScreenState extends State<AuditionReviewScreen> {
                       .animate()
                       .fadeIn(delay: 300.ms),
 
+                  // Revize öncesi videolar (yedek)
+                  if (widget.audition.previousVersions.isNotEmpty) ...[
+                    const SizedBox(height: 20),
+                    _buildSection(
+                      'Önceki Videolar (Revize Öncesi)',
+                      Icons.history,
+                      child: Column(
+                        children: widget.audition.previousVersions
+                            .asMap()
+                            .entries
+                            .map((e) {
+                          final v = e.value;
+                          final url = v['videoUrl'] as String? ?? '';
+                          final note = v['reviewerNote'] as String?;
+                          return ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: const Icon(Icons.play_circle_outline, color: AppTheme.accent),
+                            title: Text('Versiyon ${e.key + 1}',
+                                style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600)),
+                            subtitle: note != null && note.isNotEmpty
+                                ? Text('Revize notu: $note',
+                                    style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textTertiary))
+                                : null,
+                            onTap: url.isEmpty
+                                ? null
+                                : () => showModalBottomSheet(
+                                      context: context,
+                                      isScrollControlled: true,
+                                      backgroundColor: AppTheme.surfaceCard,
+                                      builder: (_) => SafeArea(
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(16),
+                                          child: AppVideoPlayer(
+                                            videoUrl: url,
+                                            autoInit: true,
+                                            maxHeight: 460,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ],
+
                   // Oyuncu notu
                   if (widget.audition.note != null &&
                       widget.audition.note!.isNotEmpty) ...[
@@ -709,125 +617,16 @@ class _AuditionReviewScreenState extends State<AuditionReviewScreen> {
     );
   }
 
-  /// Video oynatıcı alanını, geniş web/masaüstü ekranlarında (özellikle
-  /// dikey/portre çekilmiş videolarda) tüm ekranı kaplayacak şekilde
-  /// devasa büyümesini engellemek için makul bir maksimum yükseklikle
-  /// sarmalar. Mobil uygulamada zaten dar olan ekran genişliği bu sınıra
-  /// nadiren takılır; web'de ise videoyu ortalanmış, makul boyutlu bir
-  /// kutuda gösterir. Tam ekran izlemek isteyen kullanıcı Chewie'nin
-  /// kendi tam ekran butonunu kullanabilir (allowFullScreen: true).
-  Widget _buildVideoPlayerBounded(Widget child) {
-    return Center(
-      child: ConstrainedBox(
-        // Web'de geniş ekranda devasa görünmesin
-        constraints: BoxConstraints(maxHeight: 520, maxWidth: kIsWeb ? 640 : double.infinity),
-        child: child,
-      ),
-    );
-  }
-
   Widget _buildVideoPlayer() {
-    if (_isVideoLoading) {
-      return _buildVideoPlayerBounded(
-        AspectRatio(
-          aspectRatio: 16 / 9,
-          child: Container(
-            color: AppTheme.surfaceLight,
-            child: const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(color: AppTheme.accent),
-                  SizedBox(height: 12),
-                  Text('Video yükleniyor...',
-                      style: TextStyle(color: AppTheme.textTertiary)),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    if (_videoError != null) {
-      return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-        decoration: BoxDecoration(
-          color: AppTheme.surfaceLight,
-          border: Border.all(color: AppTheme.error.withValues(alpha: 0.2)),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(
-                color: AppTheme.error.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.videocam_off,
-                  size: 32, color: AppTheme.error),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Video Oynatma Hatası',
-              style: GoogleFonts.outfit(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.error,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _videoError!,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.inter(
-                fontSize: 13,
-                color: AppTheme.textSecondary,
-                height: 1.4,
-              ),
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              height: 40,
-              child: OutlinedButton.icon(
-                onPressed: () {
-                  setState(() {
-                    _isVideoLoading = true;
-                    _videoError = null;
-                  });
-                  _videoController?.dispose();
-                  _videoController = null;
-                  _chewieController?.dispose();
-                  _chewieController = null;
-                  _initVideo();
-                },
-                icon: const Icon(Icons.refresh, size: 18),
-                label: Text(
-                  'Tekrar Dene',
-                  style: GoogleFonts.inter(fontSize: 13),
-                ),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppTheme.accent,
-                  side: const BorderSide(color: AppTheme.accent),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return _buildVideoPlayerBounded(
-      AspectRatio(
-        aspectRatio: _videoController!.value.aspectRatio,
-        child: Chewie(controller: _chewieController!),
+    // Ortak oynatıcı: zaman aşımı, hata durumunda "Tekrar Dene" ve
+    // "Harici Oynatıcıda Aç" seçenekleri — beyaz/boş ekran kalmaz.
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+      child: AppVideoPlayer(
+        key: ValueKey(widget.audition.videoUrl),
+        videoUrl: widget.audition.videoUrl,
+        autoInit: true,
+        maxHeight: 520,
       ),
     );
   }
@@ -854,20 +653,38 @@ class _AuditionReviewScreenState extends State<AuditionReviewScreen> {
               Container(
                 width: 48,
                 height: 48,
+                clipBehavior: Clip.antiAlias,
                 decoration: BoxDecoration(
                   gradient: AppTheme.primaryGradient,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Center(
-                  child: Text(
-                    _getInitials(widget.audition.actorName),
-                    style: GoogleFonts.outfit(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: AppTheme.accent,
-                    ),
-                  ),
-                ),
+                child: (_actorProfile?.profilePhotoUrl?.isNotEmpty ?? false)
+                    ? MediaUpload.image(
+                        _actorProfile!.profilePhotoUrl!,
+                        fit: BoxFit.cover,
+                        width: 48,
+                        height: 48,
+                        errorBuilder: (_, __, ___) => Center(
+                          child: Text(
+                            _getInitials(widget.audition.actorName),
+                            style: GoogleFonts.outfit(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.accent,
+                            ),
+                          ),
+                        ),
+                      )
+                    : Center(
+                        child: Text(
+                          _getInitials(widget.audition.actorName),
+                          style: GoogleFonts.outfit(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.accent,
+                          ),
+                        ),
+                      ),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -937,6 +754,35 @@ class _AuditionReviewScreenState extends State<AuditionReviewScreen> {
                       ),
                     ),
             ),
+            if (authProvider.isAdmin || authProvider.isModerator)
+              SizedBox(
+                width: double.infinity,
+                height: 36,
+                child: TextButton.icon(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ActorHistoryScreen(
+                        actorId: widget.audition.actorId,
+                        actorName: widget.audition.actorName,
+                      ),
+                    ),
+                  ),
+                  icon: const Icon(Icons.history, size: 16),
+                  label: Text(
+                    'Oyuncu Geçmişi',
+                    style: GoogleFonts.outfit(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.accent,
+                    ),
+                  ),
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+              ),
           ],
         ],
       ),
@@ -1202,6 +1048,79 @@ class _AuditionReviewScreenState extends State<AuditionReviewScreen> {
     );
   }
 
+  /// Revize talebi: oyuncuya proje özelinde net bir not yazılması zorunlu.
+  /// Not, oyuncunun başvuru ekranında ve bildiriminde aynen görünür.
+  Future<void> _showRevisionDialog() async {
+    final controller = TextEditingController(text: _noteController.text.trim());
+    final note = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surfaceCard,
+        title: Text(
+          'Revize İste',
+          style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '"${widget.audition.projectTitle}" · ${widget.audition.roleName}\n'
+                '${widget.audition.actorName} bu notu kendi panelinde görecek ve bildirim alacak.',
+                style: GoogleFonts.inter(fontSize: 12.5, color: AppTheme.textSecondary),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                maxLines: 5,
+                maxLength: 500,
+                style: const TextStyle(color: AppTheme.textPrimary),
+                decoration: InputDecoration(
+                  hintText: 'Örn: Bu sahneyi daha enerjik ve gülümseyerek tekrar çekebilir misin?',
+                  hintStyle: const TextStyle(color: AppTheme.textTertiary),
+                  filled: true,
+                  fillColor: AppTheme.surfaceLight,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('İptal', style: TextStyle(color: AppTheme.textTertiary)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final text = controller.text.trim();
+              if (text.isEmpty) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  const SnackBar(
+                    content: Text('Lütfen oyuncuya iletilecek revize notunu yazın.'),
+                    backgroundColor: AppTheme.warning,
+                  ),
+                );
+                return;
+              }
+              Navigator.pop(ctx, text);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.warning),
+            child: const Text('Revize Gönder'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (note == null || note.isEmpty || !mounted) return;
+    _noteController.text = note;
+    await _handleReview(AuditionStatus.revision);
+  }
+
   Widget _buildActionButtons() {
     return Column(
       children: [
@@ -1267,8 +1186,7 @@ class _AuditionReviewScreenState extends State<AuditionReviewScreen> {
               child: SizedBox(
                 height: 48,
                 child: OutlinedButton.icon(
-                  onPressed: () =>
-                      _handleReview(AuditionStatus.revision),
+                  onPressed: _showRevisionDialog,
                   icon: const Icon(Icons.replay, size: 18),
                   label: Text(
                     'Revizyon',
@@ -1374,17 +1292,11 @@ class _AuditionReviewScreenState extends State<AuditionReviewScreen> {
               child: Container(
                 constraints: const BoxConstraints(maxHeight: 180),
                 width: double.infinity,
-                child: photo.startsWith('http')
-                    ? Image.network(
-                        photo,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => _buildFallbackPhoto(photo),
-                      )
-                    : localImage(
-                        photo,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => _buildFallbackPhoto(photo),
-                      ),
+                child: MediaUpload.image(
+                  photo,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => _buildFallbackPhoto(photo),
+                ),
               ),
             ),
           ],
@@ -1656,7 +1568,9 @@ class _AuditionReviewScreenState extends State<AuditionReviewScreen> {
           style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
         ),
         content: const Text(
-          'Bu audition başvurusunu tamamen silmek istediğinize emin misiniz? Bu işlem geri alınamaz.',
+          'Bu audition başvurusu "Silinenler" alanına taşınacak. Video ve kayıt yedekte kalır; '
+          'gerektiğinde Başvurular > Silinenler ekranından geri yükleyebilirsiniz. '
+          'Oyuncunun kendi geçmişinde kayıt görünmeye devam eder.',
           style: TextStyle(color: AppTheme.textSecondary),
         ),
         actions: [
@@ -1693,11 +1607,16 @@ class _AuditionReviewScreenState extends State<AuditionReviewScreen> {
                 }
               } else {
                 try {
-                  await AuditionService().deleteAudition(widget.audition.id, widget.audition.videoUrl);
+                  await AuditionService().deleteAudition(
+                    widget.audition.id,
+                    widget.audition.videoUrl,
+                    deletedById: user.uid,
+                    deletedByName: user.fullName,
+                  );
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
-                        content: Text('Audition başarıyla silindi.'),
+                        content: Text('Audition "Silinenler" alanına taşındı.'),
                         backgroundColor: AppTheme.success,
                       ),
                     );

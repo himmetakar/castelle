@@ -1,8 +1,9 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:castelle/core/utils/media_upload.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
-import 'package:castelle/core/utils/video_utils.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -10,6 +11,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:video_compress/video_compress.dart';
 
 import 'package:castelle/core/theme/app_theme.dart';
 import 'package:castelle/core/providers/auth_provider.dart';
@@ -20,8 +22,6 @@ import 'package:castelle/features/employer/providers/project_provider.dart';
 import 'package:castelle/features/actor/widgets/skills_input_widget.dart';
 import 'package:castelle/core/services/private_profile_fields.dart';
 import 'package:castelle/core/utils/turkish_text.dart';
-import 'package:castelle/core/services/media_upload.dart';
-import 'package:castelle/core/utils/platform_utils.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// Castelle - Proje Oluşturma / Düzenleme Ekranı
@@ -54,9 +54,12 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
   // Project media & budget
   final ImagePicker _picker = ImagePicker();
   final List<String> _localImagePaths = [];
+  // Seçilen dosyaların kendisi (web'de path bir blob: adresidir, dart:io
+  // File ile açılamaz — yükleme bu XFile'lar üzerinden yapılır).
+  final Map<String, XFile> _localImageFiles = {};
   final List<String> _uploadedImageUrls = [];
   String? _localVideoPath;
-  String? _localVideoName; // web'de yol blob URL olduğu için ad ayrıca tutulur
+  XFile? _localVideoFile;
   String? _uploadedVideoUrl;
   bool _uploadingMedia = false;
   String? _uploadError;
@@ -115,24 +118,22 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
       _moderatorsError = null;
     });
     try {
-      // Sadece rol filtresi: `isActive == true` filtresi, yaş/onay akışı
-      // nedeniyle isActive=false kalan (veya alanı hiç olmayan) moderatörleri
-      // sessizce eliyordu. Pasif hesaplar listede işaretlenerek gösterilir.
+      // Proje sorumlusu moderatör VEYA admin olabilir. Sistemde hiç moderatör
+      // yokken liste boş kaldığı için sorumlu atanamıyor ve oyuncu tarafında
+      // "Atanmadı" görünüyordu.
       final snap = await FirebaseFirestore.instance
           .collection('users')
           .where('role', whereIn: [UserRole.moderator.value, UserRole.admin.value])
           .get();
+      // Pasif hesaplar listelenmez (eski kayıtlarda isActive alanı yoksa aktif sayılır)
+      final activeDocs = snap.docs.where((d) => d.data()['isActive'] != false).toList();
 
-      final list = snap.docs
-          .map((doc) => UserModel.fromMap(doc.data(), doc.id))
-          .where((u) => u.fullName.trim().isNotEmpty)
-          .toList()
-        ..sort((a, b) {
-          // Önce moderatörler, sonra adminler; kendi içinde isme göre
-          if (a.role != b.role) return a.role == UserRole.moderator ? -1 : 1;
-          return normalizeTurkish(a.fullName).compareTo(normalizeTurkish(b.fullName));
-        });
-      if (!mounted) return;
+      // Moderatör telefonu private alt dokümanda; yetki yoksa boş gelir.
+      final list = await Future.wait(activeDocs.map((doc) async => UserModel.fromMap({
+            ...doc.data(),
+            ...await readPrivateFields(FirebaseFirestore.instance, doc.id),
+          }, doc.id)));
+      list.sort((a, b) => a.fullName.toLowerCase().compareTo(b.fullName.toLowerCase()));
       setState(() {
         _allModerators = list;
         _loadingModerators = false;
@@ -405,9 +406,11 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
       String? uploadedPrimaryUrl;
       for (int i = 0; i < _localImagePaths.length; i++) {
         final path = _localImagePaths[i];
-        final ref = storage.ref().child('projects/$projectId/gallery/image_${DateTime.now().millisecondsSinceEpoch}_$i.jpg');
-        final uploadTask = await startUpload(ref, path,
-            metadata: SettableMetadata(contentType: 'image/jpeg'));
+        final xFile = _localImageFiles[path] ?? XFile(path);
+        final media = await MediaUpload.prepare(xFile, kind: 'image');
+        final ref = storage.ref().child('projects/$projectId/gallery/image_${DateTime.now().millisecondsSinceEpoch}_$i.${media.extension}');
+        final uploadTask = MediaUpload.upload(ref, xFile, media);
+
         await uploadTask;
         final url = await ref.getDownloadURL();
         _uploadedImageUrls.add(url);
@@ -421,6 +424,7 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
         });
       }
       _localImagePaths.clear();
+      _localImageFiles.clear();
 
       if (uploadedPrimaryUrl != null) {
         _primaryImageUrlOrPath = uploadedPrimaryUrl;
@@ -428,13 +432,40 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
 
       // 2. Upload local video
       if (_localVideoPath != null) {
-        final ref = storage.ref().child('projects/$projectId/sample_video.mp4');
-        final uploadTask = await startUpload(ref, _localVideoPath!,
-            metadata: SettableMetadata(contentType: 'video/mp4'));
+        var xFile = _localVideoFile ?? XFile(_localVideoPath!);
+        // Örnek videoyu tüm cihazlarda oynatılabilen H.264 MP4'e dönüştür.
+        // (iPhone'un HEVC/.mov videoları bazı Android cihazlarda açılmıyordu.)
+        if (!kIsWeb) {
+          try {
+            final info = await VideoCompress.compressVideo(
+              xFile.path,
+              quality: VideoQuality.DefaultQuality,
+              deleteOrigin: false,
+              includeAudio: true,
+            );
+            final compressed = info?.file;
+            if (compressed != null && await compressed.length() > 0) {
+              xFile = XFile(compressed.path);
+            }
+          } catch (e) {
+            debugPrint('⚠️ Örnek video sıkıştırılamadı, orijinal yükleniyor: $e');
+            try {
+              await VideoCompress.cancelCompression();
+            } catch (_) {}
+          }
+        }
+        final media = await MediaUpload.prepare(xFile, kind: 'video');
+        // Her yüklemede benzersiz dosya adı: eski videonun önbellekte
+        // kalmasını ve geçersiz token sorunlarını önler.
+        final ref = storage.ref().child(
+            'projects/$projectId/sample_video_${DateTime.now().millisecondsSinceEpoch}.${media.extension}');
+        final uploadTask = MediaUpload.upload(ref, xFile, media);
+
         await uploadTask;
         final url = await ref.getDownloadURL();
         _uploadedVideoUrl = url;
         _localVideoPath = null;
+        _localVideoFile = null;
       }
 
       setState(() {
@@ -465,6 +496,7 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
       if (file != null) {
         setState(() {
           _localImagePaths.add(file.path);
+          _localImageFiles[file.path] = file;
           _primaryImageUrlOrPath ??= file.path;
         });
       }
@@ -508,7 +540,7 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
       final file = await _picker.pickVideo(source: ImageSource.gallery, maxDuration: const Duration(seconds: 45));
       if (file != null) {
         // Enforce landscape check
-        final controller = localVideoController(file.path);
+        final controller = MediaUpload.videoController(file.path);
         await controller.initialize();
         final size = controller.value.size;
         final isLandscape = size.width > size.height;
@@ -536,7 +568,7 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
 
         setState(() {
           _localVideoPath = file.path;
-          _localVideoName = file.name;
+          _localVideoFile = file;
         });
       }
     } catch (e) {
@@ -1406,9 +1438,12 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
-                          isUploaded
-                              ? Image.network(pathOrUrl, fit: BoxFit.cover)
-                              : localImage(pathOrUrl),
+                          // Logo/görsel kırpılmadan gösterilir (uzun logolar dahil)
+                          Container(
+                            color: Colors.white,
+                            padding: const EdgeInsets.all(6),
+                            child: MediaUpload.image(pathOrUrl, fit: BoxFit.contain),
+                          ),
                           // Birincil Badge
                           if (isPrimary)
                             Positioned(
@@ -1583,8 +1618,7 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
                       ),
                       if (_localVideoPath != null)
                         Text(
-                          // Platform.pathSeparator web'de hata fırlatıyordu (gri ekran)
-                          _localVideoName ?? _localVideoPath!.split(RegExp(r'[/\\]')).last,
+                          MediaUpload.displayName(_localVideoFile, _localVideoPath),
                           style: GoogleFonts.inter(
                             fontSize: 11,
                             color: AppTheme.textTertiary,
@@ -1600,6 +1634,7 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
                   onPressed: () {
                     setState(() {
                       _localVideoPath = null;
+                      _localVideoFile = null;
                       _uploadedVideoUrl = null;
                     });
                   },
@@ -1804,8 +1839,17 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
               hintText: 'Örn: Ana Karakter, Figüran',
               prefixIcon: Icon(Icons.person_outline, size: 20),
             ),
-            validator: (v) =>
-                v == null || v.trim().isEmpty ? 'Rol adı gerekli' : null,
+            validator: (v) {
+              if (v == null || v.trim().isEmpty) return 'Rol adı gerekli';
+              // Her karakterin önerileri, davetleri ve senaryosu rol adıyla
+              // eşleştirildiği için rol adları proje içinde benzersiz olmalı.
+              final name = v.trim().toLowerCase();
+              final sameCount = _roles
+                  .where((r) => r.nameController.text.trim().toLowerCase() == name)
+                  .length;
+              if (sameCount > 1) return 'Bu rol adı zaten kullanılıyor';
+              return null;
+            },
           ),
 
           const SizedBox(height: 12),
@@ -1958,6 +2002,41 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
 
           const SizedBox(height: 12),
 
+          // Kilo (kg) Min - Max
+          Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  controller: role.weightMinController,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  style: const TextStyle(color: AppTheme.textPrimary),
+                  decoration: const InputDecoration(
+                    labelText: 'Min Kilo (kg)',
+                    hintText: 'Örn: 55',
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextFormField(
+                  controller: role.weightMaxController,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  style: const TextStyle(color: AppTheme.textPrimary),
+                  decoration: const InputDecoration(
+                    labelText: 'Max Kilo (kg)',
+                    hintText: 'Örn: 70',
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 12),
+
           // Şehir & Görünüm
           Row(
             children: [
@@ -2085,7 +2164,34 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
         TextField(
           controller: _coordinatorSearchController,
           style: const TextStyle(color: AppTheme.textPrimary),
-          onChanged: _onCoordinatorSearchChanged,
+          onChanged: (val) {
+            setState(() {
+              final query = val.trim().toLowerCase();
+              // Yazı seçili sorumlunun adından farklılaştıysa eski seçimi kaldır
+              if (_coordinatorId != null &&
+                  query != (_coordinatorName ?? '').trim().toLowerCase()) {
+                _coordinatorId = null;
+                _coordinatorName = null;
+                _coordinatorPhone = null;
+              }
+              if (query.isEmpty) {
+                _filteredModerators = [];
+              } else {
+                _filteredModerators = _allModerators
+                    .where((m) => m.fullName.toLowerCase().contains(query))
+                    .toList();
+                // Tam eşleşen tek kişi varsa listeden seçilmese de ata
+                final exact = _allModerators
+                    .where((m) => m.fullName.trim().toLowerCase() == query)
+                    .toList();
+                if (exact.length == 1) {
+                  _coordinatorId = exact.first.uid;
+                  _coordinatorName = exact.first.fullName;
+                  _coordinatorPhone = exact.first.phone;
+                }
+              }
+            });
+          },
           decoration: InputDecoration(
             hintText: 'Casting sorumlusu arayın...',
             prefixIcon: const Icon(Icons.person_search, size: 20),
@@ -2105,6 +2211,19 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
                 : null,
           ),
         ),
+        if (!_loadingModerators && _allModerators.isEmpty) ...[
+          const SizedBox(height: 6),
+          Text(
+            'Sistemde atanabilecek moderatör/admin bulunamadı. Kullanıcı Yönetimi\'nden bir kullanıcıya "Moderatör" rolü verin.',
+            style: GoogleFonts.inter(fontSize: 11.5, color: AppTheme.warning),
+          ),
+        ] else if (!_loadingModerators && _coordinatorId == null) ...[
+          const SizedBox(height: 6),
+          Text(
+            'Sorumlu seçilmezse oyuncular bu alanı "Atanmadı" olarak görür.',
+            style: GoogleFonts.inter(fontSize: 11.5, color: AppTheme.textTertiary),
+          ),
+        ],
         if (_loadingModerators) ...[
           const SizedBox(height: 6),
           const LinearProgressIndicator(
@@ -2169,7 +2288,7 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
                     ),
                   ),
                   subtitle: Text(
-                    mod.email,
+                    '${mod.role.displayName}${mod.email.isNotEmpty ? ' · ${mod.email}' : ''}',
                     style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textTertiary),
                   ),
                   trailing: mod.role == UserRole.admin || !mod.isActive
@@ -2350,14 +2469,21 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['mp3', 'm4a', 'wav', 'aac', 'ogg'],
-      withData: kIsWeb, // web'de dosya yolu yok, baytlar gerekir
+      // Web'de dosya yolu (path) yoktur; içeriği bayt olarak almak gerekir.
+      withData: kIsWeb,
     );
 
     if (result == null || result.files.isEmpty) return;
-    final picked = result.files.single;
-    // Web'de PlatformFile.path erişimi hata fırlatır
-    final filePath = kIsWeb ? '' : picked.path;
-    if (filePath == null || (kIsWeb && picked.bytes == null)) return;
+    final file = MediaUpload.fromPlatformFile(result.files.single);
+    if (file == null) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Ses dosyası okunamadı.'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+      return;
+    }
 
     // Yükleniyor göster
     messenger.showSnackBar(
@@ -2378,14 +2504,10 @@ class _ProjectCreateScreenState extends State<ProjectCreateScreen> {
       ),
     );
     try {
-      final ext = fileExtension(filePath, name: picked.name, fallback: 'mp3');
-      final uploadTask = await startUpload(
-        FirebaseStorage.instance.ref(
-            'projects/$_projectId/gallery/audio_${DateTime.now().millisecondsSinceEpoch}_${picked.name}'),
-        filePath,
-        bytes: picked.bytes,
-        metadata: SettableMetadata(contentType: ext == 'mp3' ? 'audio/mpeg' : 'audio/$ext'),
-      );
+      final media = await MediaUpload.prepare(file, kind: 'audio');
+      final ref = FirebaseStorage.instance
+          .ref('projects/$_projectId/gallery/audio_${DateTime.now().millisecondsSinceEpoch}_${result.files.single.name}');
+      final uploadTask = MediaUpload.upload(ref, file, media);
       final snapshot = await uploadTask;
       final downloadUrl = await snapshot.ref.getDownloadURL();
 
@@ -2534,6 +2656,8 @@ class _RoleFormData {
   final TextEditingController ageMaxController;
   final TextEditingController heightMinController;
   final TextEditingController heightMaxController;
+  final TextEditingController weightMinController;
+  final TextEditingController weightMaxController;
   final TextEditingController cityController;
   final TextEditingController appearanceController;
   final TextEditingController quotaController;
@@ -2553,6 +2677,8 @@ class _RoleFormData {
         ageMaxController = TextEditingController(),
         heightMinController = TextEditingController(),
         heightMaxController = TextEditingController(),
+        weightMinController = TextEditingController(),
+        weightMaxController = TextEditingController(),
         cityController = TextEditingController(),
         appearanceController = TextEditingController(),
         quotaController = TextEditingController(text: '1'),
@@ -2577,6 +2703,10 @@ class _RoleFormData {
             TextEditingController(text: role.heightMin?.toString() ?? ''),
         heightMaxController =
             TextEditingController(text: role.heightMax?.toString() ?? ''),
+        weightMinController =
+            TextEditingController(text: role.weightMin?.toString() ?? ''),
+        weightMaxController =
+            TextEditingController(text: role.weightMax?.toString() ?? ''),
         cityController = TextEditingController(text: role.city ?? ''),
         appearanceController = TextEditingController(text: role.appearance ?? ''),
         quotaController =
@@ -2605,6 +2735,8 @@ class _RoleFormData {
       ageMax: int.tryParse(ageMaxController.text),
       heightMin: int.tryParse(heightMinController.text),
       heightMax: int.tryParse(heightMaxController.text),
+      weightMin: int.tryParse(weightMinController.text),
+      weightMax: int.tryParse(weightMaxController.text),
       city: cityController.text.trim().isEmpty ? null : cityController.text.trim(),
       appearance: appearanceController.text.trim().isEmpty ? null : appearanceController.text.trim(),
       gender: gender,
@@ -2626,6 +2758,8 @@ class _RoleFormData {
     ageMaxController.dispose();
     heightMinController.dispose();
     heightMaxController.dispose();
+    weightMinController.dispose();
+    weightMaxController.dispose();
     cityController.dispose();
     appearanceController.dispose();
     quotaController.dispose();

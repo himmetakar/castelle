@@ -1,8 +1,9 @@
 import 'package:flutter/foundation.dart';
+import 'package:image_picker/image_picker.dart' show XFile;
+import 'package:castelle/core/utils/media_upload.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:castelle/core/services/media_upload.dart';
 import 'package:castelle/core/constants/app_constants.dart';
 import 'package:castelle/core/models/actor_profile_model.dart';
 import 'package:castelle/core/models/notification_model.dart';
@@ -31,21 +32,21 @@ class ActorProfileService {
     required String key,    // 'profile_photo', 'gallery_0', 'intro_video' vb.
     Function(double)? onProgress,
   }) async {
-    final extension = fileExtension(file.path,
-        name: file.name, fallback: type == 'video' ? 'mp4' : 'jpg');
-    final fileName = '${uid}_${key}_${DateTime.now().millisecondsSinceEpoch}.$extension';
+    // Web'de path bir blob: adresidir ve uzantı içermez; tür ve uzantı
+    // dosyanın kendisinden tespit edilir.
+    final media = await MediaUpload.prepare(
+      file,
+      kind: type == 'video' ? 'video' : 'image',
+    );
+    final fileName = '${uid}_${key}_${DateTime.now().millisecondsSinceEpoch}.${media.extension}';
     final storagePath = 'profiles/$uid/$type/$fileName';
 
-    // MIME type — uzantıya göre belirle
-    final mimeType = _mimeType(type, extension);
-
-    debugPrint('📤 [Storage Upload] Başlıyor: $storagePath ($mimeType)');
+    debugPrint('📤 [Storage Upload] Başlıyor: $storagePath (${media.contentType})');
 
     try {
       final ref = _storage.ref().child(storagePath);
 
-      final metadata = SettableMetadata(contentType: mimeType);
-      final uploadTask = await startUpload(ref, file.path, metadata: metadata);
+      final uploadTask = MediaUpload.upload(ref, file, media);
 
       // İlerleme takibi
       if (onProgress != null) {
@@ -76,63 +77,90 @@ class ActorProfileService {
     }
   }
 
-  /// Uzantı ve türe göre doğru MIME type döndür
-  String _mimeType(String type, String ext) {
-    if (type == 'video') {
-      switch (ext) {
-        case 'mp4':  return 'video/mp4';
-        case 'mov':  return 'video/quicktime';
-        case 'avi':  return 'video/x-msvideo';
-        case 'mkv':  return 'video/x-matroska';
-        default:     return 'video/mp4';
-      }
-    } else {
-      switch (ext) {
-        case 'jpg':
-        case 'jpeg': return 'image/jpeg';
-        case 'png':  return 'image/png';
-        case 'webp': return 'image/webp';
-        case 'heic': return 'image/heic';
-        case 'gif':  return 'image/gif';
-        default:     return 'image/jpeg';
-      }
-    }
-  }
-
   // ─────────────────────────────────────────────────────────
   // FIRESTORE CRUD
   // ─────────────────────────────────────────────────────────
 
   /// Oyuncu profilini getir — direkt Firestore
+  /// Belge yoksa null döner. Okuma HATASI (ağ, yetki...) durumunda fırlatır —
+  /// eskiden hata yutulup null dönüyordu; üst katman bunu "profil yok" sanıp
+  /// BOŞ bir profil oluşturuyor, kullanıcı her şeyin silindiğini görüyor ve
+  /// kaydedince gerçekten siliniyordu.
   Future<ActorProfileModel?> getActorProfile(String uid) async {
+    final doc = await _firestore
+        .collection(AppConstants.usersCollection)
+        .doc(uid)
+        .get();
+    if (!doc.exists) return null;
+    final data = Map<String, dynamic>.from(doc.data()!);
+    // Özel alanlar (telefon, IBAN, veli...) okunamazsa profil yine de
+    // kamu alanlarıyla yüklensin; tüm profil boşa düşmesin.
     try {
-      final doc = await _firestore
-          .collection(AppConstants.usersCollection)
-          .doc(uid)
-          .get();
-      if (!doc.exists) return null;
-      final data = Map<String, dynamic>.from(doc.data()!);
       data.addAll(await readPrivateFields(_firestore, uid));
-      return ActorProfileModel.fromMap(data, uid);
     } catch (e) {
-      debugPrint('⚠️ [ActorProfileService.getActorProfile] Error: $e');
-      return null;
+      debugPrint('⚠️ [ActorProfileService.getActorProfile] private okunamadı: $e');
     }
+    return ActorProfileModel.fromMap(data, uid);
   }
 
   /// Oyuncu profilini kaydet/güncelle — direkt Firestore
   Future<void> saveActorProfile(ActorProfileModel profile) async {
     final data = profile.toMap();
     data['updatedAt'] = FieldValue.serverTimestamp();
-    data['role'] = 'actor';
     data['isProfileComplete'] = profile.completionPercentage >= 70;
     data['completionPercentage'] = profile.completionPercentage;
-    data['isActive'] = true;
+    // GÜVENLİK: Rol, aktiflik ve admin notu profil kaydıyla değiştirilmez.
+    // (Önceden her kayıtta role='actor' ve isActive=true yazılıyordu; bu,
+    // veli onayı bekleyen 18 yaş altı hesapları aktif hale getiriyor ve
+    // admin notunu eski değerle ezebiliyordu.)
+    data.remove('role');
+    data.remove('isActive');
+    data.remove('adminNote');
+    data.remove('approvedAt');
+    data.remove('rejectedAt');
+    data.remove('isGuardianApproved');
+    data.remove('guardianApprovalStatus');
+    // Onay durumu: yalnızca henüz onaya gönderilmemiş (taslak/eksik) ya da
+    // reddedilmiş bir profil 'pending'e geçebilir. Onaylanmış hesap, eski bir
+    // profil kopyasıyla kaydedilip 'pending'e geri döndürülemez (admin onayı
+    // ezilmesin).
+    final userRef = _firestore
+        .collection(AppConstants.usersCollection)
+        .doc(profile.uid);
+    Map<String, dynamic> current = const {};
+    try {
+      current = (await userRef.get()).data() ?? const {};
+    } catch (_) {}
+    final currentStatus = current['approvalStatus'] as String?;
+    // Güvenlik kurallarının zaten reddedeceği alanları istemciden göndermeyelim;
+    // aksi halde tüm kayıt "permission-denied" ile düşüyor ve kullanıcı hiçbir
+    // şeyi kaydedemiyordu.
+    // • 18 yaş altı olarak kayıtlı hesap kendini yetişkin yapamaz
+    if (current['isUnder18'] == true && data['isUnder18'] != true) {
+      data.remove('isUnder18');
+    }
+    // • Veli onayı olmayan 18 yaş altı profil herkese açılamaz
+    final minorBlocked =
+        current['isUnder18'] == true && current['isGuardianApproved'] != true;
+    if (minorBlocked && data['isHidden'] == false) {
+      data.remove('isHidden');
+    }
+    final canMoveToPending = data['approvalStatus'] == 'pending' &&
+        (currentStatus == null ||
+            currentStatus == 'draft' ||
+            currentStatus == 'incomplete' ||
+            currentStatus == 'rejected');
+    if (!canMoveToPending) data.remove('approvalStatus');
+
+    // Profil henüz yüklenmeden (örn. hemen fotoğraf yüklendiğinde) oluşturulan
+    // boş iskelet model, gerçek ad/e-posta/telefonu boş string ile ezmesin.
+    for (final k in ['fullName', 'email', 'phone']) {
+      final v = data[k];
+      if (v == null || (v is String && v.trim().isEmpty)) data.remove(k);
+    }
     final private = takePrivateFields(data);
 
-    await _firestore
-        .collection(AppConstants.usersCollection)
-        .doc(profile.uid)
+    await userRef
         .set(data, SetOptions(merge: true));
     await writePrivateFields(_firestore, profile.uid, private);
   }
@@ -277,8 +305,11 @@ class ActorProfileService {
   Stream<List<ActorProfileModel>> streamPendingActors() {
     return _firestore
         .collection(AppConstants.usersCollection)
-        .where('role', isEqualTo: 'actor')
-        .where('approvalStatus', isEqualTo: 'pending')
+        // actor_hidden: gizli (isHidden != false) yeni üyeler de onay kuyruğunda görünsün
+        .where('role', whereIn: ['actor', 'actor_hidden'])
+        // pending_guardian: 18 yaş altı, veli onayı bekleyen yeni üyeler de
+        // kuyrukta görünsün (admin veli ile görüşüp onayı işaretleyebilsin)
+        .where('approvalStatus', whereIn: ['pending', 'pending_guardian'])
         .snapshots()
         // Admin ekranı telefonu gösteriyor — bekleyen her oyuncu için private okunur.
         .asyncMap((snap) async => (await Future.wait(snap.docs.map((doc) async =>
@@ -291,13 +322,25 @@ class ActorProfileService {
 
   /// Oyuncuyu onayla
   Future<void> approveActor(String uid) async {
-    await _firestore
-        .collection(AppConstants.usersCollection)
-        .doc(uid)
-        .update({
+    final userRef =
+        _firestore.collection(AppConstants.usersCollection).doc(uid);
+    final current = (await userRef.get()).data() ?? <String, dynamic>{};
+    // Veli onayı bekleyen 18 yaş altı hesap, admin onayıyla otomatik yayına alınmaz.
+    final blockedMinor =
+        current['isUnder18'] == true && current['isGuardianApproved'] != true;
+    if (blockedMinor) {
+      // Sessizce "onaylı ama gizli" bırakmak kafa karıştırıyordu; admin ne
+      // yapması gerektiğini görsün.
+      throw Exception(
+          '18 yaş altı üye: önce veli ile görüşüp "Veli Onayı Alındı" işaretleyin, sonra onaylayın.');
+    }
+    await userRef.update({
       'approvalStatus': 'approved',
       'approvedAt': FieldValue.serverTimestamp(),
       'adminNote': null,
+      'isActive': true,
+      'isHidden': false,
+      'updatedAt': FieldValue.serverTimestamp(),
     });
 
     // Oyuncuya bildirim gönder
@@ -315,6 +358,26 @@ class ActorProfileService {
     } catch (e) {
       debugPrint('⚠️ [approveActor] Notification error: $e');
     }
+  }
+
+  /// Veli onayını kaydet (admin/moderatör, veli ile telefonla görüşüp onay aldıktan sonra).
+  ///
+  /// 18 yaş altı hesap `pending_guardian` durumundan normal onay kuyruğuna
+  /// (`pending`) geçer; ardından [approveActor] ile yayına alınabilir.
+  Future<void> approveGuardian(String uid, {String? approvedByName, String? note}) async {
+    final userRef =
+        _firestore.collection(AppConstants.usersCollection).doc(uid);
+    final current = (await userRef.get()).data() ?? <String, dynamic>{};
+    await userRef.update({
+      'isGuardianApproved': true,
+      'guardianApprovalStatus': 'approved',
+      'guardianApprovedAt': FieldValue.serverTimestamp(),
+      if (approvedByName != null && approvedByName.isNotEmpty)
+        'guardianApprovedBy': approvedByName,
+      if (note != null && note.isNotEmpty) 'guardianApprovalNote': note,
+      if (current['approvalStatus'] == 'pending_guardian') 'approvalStatus': 'pending',
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
   }
 
   /// Oyuncuyu reddet

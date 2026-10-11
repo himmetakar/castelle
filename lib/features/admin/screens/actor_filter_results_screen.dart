@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:castelle/core/widgets/web_frame.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:castelle/core/theme/app_theme.dart';
@@ -31,6 +30,7 @@ class _ActorFilterResultsScreenState extends State<ActorFilterResultsScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final isActorUser = context.read<AuthProvider>().isActor;
       final provider = context.read<ActorFilterProvider>();
+      provider.publicOnly = isActorUser;
       if (isActorUser) {
         provider.clearFilters();
       }
@@ -296,9 +296,12 @@ class _ActorFilterResultsScreenState extends State<ActorFilterResultsScreen> {
       controller: _scrollController,
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
       itemCount: results.length + (provider.hasMore ? 1 : 0),
-      gridDelegate: adaptiveGridDelegate(
-        mobileCount: 2,
-        maxExtent: 240,
+      // Sabit 2 sütun mobilde iyiydi ama web'de geniş ekranda her kart
+      // ekranın yarısını kaplayıp devasa görünüyordu. Kart genişliğine bir
+      // üst sınır koyup sütun sayısını ekran genişliğine göre otomatik
+      // hesaplıyoruz — mobilde yine 2 sütun, web'de daha fazla, küçük kart.
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 190,
         mainAxisSpacing: 12,
         crossAxisSpacing: 12,
         childAspectRatio: 0.72,
@@ -329,20 +332,25 @@ class _ActorFilterResultsScreenState extends State<ActorFilterResultsScreen> {
           index: index,
           showAdminInfo: !isActor,
           matchedSkillCount: matchedSkillCount,
-          onTap: actor.isHidden
-              ? () => ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Bu kişi profilini gizledi.'),
-                      duration: Duration(seconds: 2),
-                      backgroundColor: AppTheme.textSecondary,
-                    ),
-                  )
-              : () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => ActorDetailScreen(actor: actor),
-                    ),
-                  ),
+          // Normal oyuncular birbirinin havuzunu gezerken: sadece foto +
+          // baş harfler görünür, profil detayına girilemez.
+          maskName: isActor,
+          onTap: isActor
+              ? null
+              : actor.isHidden
+                  ? () => ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Bu kişi profilini gizledi.'),
+                          duration: Duration(seconds: 2),
+                          backgroundColor: AppTheme.textSecondary,
+                        ),
+                      )
+                  : () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ActorDetailScreen(actor: actor),
+                        ),
+                      ),
         );
       },
     );

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -32,6 +33,10 @@ class GoogleAgeVerificationRequired implements Exception {
   String toString() => 'GoogleAgeVerificationRequired($email)';
 }
 
+/// Onaylatılan yasal metinlerin (KVKK aydınlatma, açık rıza, kullanım
+/// koşulları) sürümü. Metinler değiştiğinde güncellenmelidir.
+const String kLegalTextsVersion = '2026-08-13';
+
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -47,32 +52,38 @@ class AuthService {
   Stream<User?> get authStateChanges => _auth.authStateChanges();
 
   /// Tanımlı Özel Admin Kullanıcı Listesi
+  ///
+  /// GÜVENLİK: Bu listedeki e-postalar ancak e-posta adresi DOĞRULANMIŞ
+  /// oturumlarda admin yetkisi alır (bkz. [isVerifiedDesignatedAdmin]).
+  /// Aynı liste firestore.rules içindeki isDesignatedAdmin() fonksiyonunda
+  /// da tanımlıdır; ikisi birlikte güncellenmelidir.
+  /// (KVKK: kişilere ait telefon numaraları kaynak koddan kaldırıldı.)
   static const List<Map<String, String>> designatedAdmins = [
-    {
-      'name': 'Castelle Yazılım',
-      'phone': '',
-      'cleanPhone': '',
-      'email': 'casttelleyazilim@gmail.com',
-    },
-    {
-      'name': 'Castelle App',
-      'phone': '',
-      'cleanPhone': '',
-      'email': 'castelleapp@gmail.com',
-    },
-    {
-      'name': 'Yağmur',
-      'phone': '+905540216815',
-      'cleanPhone': '5540216815',
-      'email': 'yagmur@castelle.com',
-    },
-    {
-      'name': 'Alican',
-      'phone': '+905322402113',
-      'cleanPhone': '5322402113',
-      'email': 'alican@castelle.com',
-    },
+    {'name': 'Castelle Yazılım', 'email': 'casttelleyazilim@gmail.com'},
+    {'name': 'Castelle App', 'email': 'castelleapp@gmail.com'},
+    // GÜVENLİK: "@castelle.com" adresleri listeden çıkarıldı. Bu alan adı
+    // şirkete ait değilse, alan adının sahibi bu adreslerle kayıt olup
+    // e-postasını doğrulayarak otomatik admin olabilirdi. Bu adreslerle
+    // zaten admin olan hesaplar yetkisini korur; yeni admin gerekiyorsa
+    // mevcut bir admin, panelden rol ataması yapmalıdır.
   ];
+
+  /// Oturum açmış kullanıcı, e-postası doğrulanmış bir tanımlı admin mi?
+  /// Doğrulanmamış bir e-posta ile kayıt olan biri admin olamaz.
+  static bool isVerifiedDesignatedAdmin(User? user) {
+    if (user == null || !user.emailVerified) return false;
+    final email = (user.email ?? '').trim().toLowerCase();
+    if (email.isEmpty) return false;
+    return designatedAdmins.any((a) => a['email']!.toLowerCase() == email);
+  }
+
+  static String? _designatedAdminName(String email) {
+    final e = email.trim().toLowerCase();
+    for (final a in designatedAdmins) {
+      if (a['email']!.toLowerCase() == e) return a['name'];
+    }
+    return null;
+  }
 
   /// Telefon Numarası Temizleme & Alan Kodu Esnekliği Yardımcısı (Son 10 Hane)
   static String normalizePhone(String rawPhone) {
@@ -83,95 +94,31 @@ class AuthService {
     return digits;
   }
 
-  /// Firestore'daki özel tanımlı Admin rollerini senkronize et
-  /// İkilik (duplicate) kayıtları temizler, yoksa oluşturur, varsa admin yapar.
+  /// Oturum açan kullanıcı, e-postası doğrulanmış tanımlı bir admin ise
+  /// SADECE KENDİ belgesinde admin rolünü garanti eder.
+  ///
+  /// GÜVENLİK: Önceki sürüm tüm kullanıcıları okuyup telefon/e-posta
+  /// eşleşmesiyle başkalarının belgelerini admin yapıyor ve "mükerrer"
+  /// kayıtları istemciden siliyordu. Telefon numarası kullanıcı tarafından
+  /// girildiği için bu yolla herkes kendini admin yapabiliyordu.
   Future<void> syncAndPromoteAdminUsers() async {
+    final user = _auth.currentUser;
+    if (!isVerifiedDesignatedAdmin(user)) return;
     try {
-      final snap = await _firestore.collection(AppConstants.usersCollection).get();
-      final allDocs = snap.docs;
-
-      for (final admin in designatedAdmins) {
-        final adminClean = admin['cleanPhone'] ?? '';
-        final adminName = admin['name'] ?? 'Admin';
-        final adminPhone = admin['phone'] ?? '';
-        final adminEmail = (admin['email'] ?? '').toLowerCase();
-
-        // 1. Bu telefon numarasına veya e-postaya uyan tüm kayıtları bul
-        final matches = allDocs.where((doc) {
-          final data = doc.data();
-          final p = data['phone'] as String? ?? '';
-          final e = (data['email'] as String? ?? '').toLowerCase();
-
-          final matchByPhone = adminClean.isNotEmpty && normalizePhone(p) == adminClean;
-          final matchByEmail = adminEmail.isNotEmpty && e == adminEmail;
-
-          return matchByPhone || matchByEmail;
-        }).toList();
-
-        if (matches.isNotEmpty) {
-          // İkilik (duplicate) temizleme: İlk dokümanı sakla, diğer mükerrer kayıtları temizle
-          final primaryDoc = matches.first;
-          for (int i = 1; i < matches.length; i++) {
-            try {
-              await _firestore.collection(AppConstants.usersCollection).doc(matches[i].id).delete();
-            } catch (_) {}
-          }
-
-          final data = primaryDoc.data();
-          final updateData = <String, dynamic>{
-            'role': UserRole.admin.value,
-            'isActive': true,
-            'approvalStatus': 'approved',
-            'updatedAt': FieldValue.serverTimestamp(),
-          };
-
-          if ((data['fullName'] as String? ?? '').isEmpty ||
-              data['fullName'] == 'Google Kullanıcısı' ||
-              data['fullName'] == 'Oyuncu') {
-            updateData['fullName'] = adminName;
-          }
-          await _firestore
-              .collection(AppConstants.usersCollection)
-              .doc(primaryDoc.id)
-              .set(updateData, SetOptions(merge: true));
-
-          if (adminPhone.isNotEmpty) {
-            // Başka kullanıcının private dokümanı — oturum admin değilse kurallar reddeder.
-            try {
-              await writePrivateFields(_firestore, primaryDoc.id, {'phone': adminPhone});
-            } catch (_) {}
-          }
-        } else if (adminEmail.isNotEmpty) {
-          // Sistemde hiç yoksa yeni Admin oluştur
-          final newDocRef = _firestore.collection(AppConstants.usersCollection).doc();
-          final newUser = UserModel(
-            uid: newDocRef.id,
-            email: adminEmail,
-            fullName: adminName,
-            phone: adminPhone,
-            role: UserRole.admin,
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-            isActive: true,
-            isGuardianApproved: true,
-            guardianApprovalStatus: 'approved',
-            hasAcceptedTerms: true,
-          );
-
-          final newData = <String, dynamic>{
-            ...newUser.toMap(),
-            'isActive': true,
-            'approvalStatus': 'approved',
-            'createdAt': FieldValue.serverTimestamp(),
-            'updatedAt': FieldValue.serverTimestamp(),
-          };
-          final private = takePrivateFields(newData);
-          await newDocRef.set(newData);
-          try {
-            await writePrivateFields(_firestore, newDocRef.id, private);
-          } catch (_) {}
-        }
+      final ref = _firestore.collection(AppConstants.usersCollection).doc(user!.uid);
+      final doc = await ref.get();
+      final data = doc.data();
+      if (data != null &&
+          data['role'] == UserRole.admin.value &&
+          data['approvalStatus'] == 'approved') {
+        return;
       }
+      await ref.set({
+        'role': UserRole.admin.value,
+        'isActive': true,
+        'approvalStatus': 'approved',
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
     } catch (_) {}
   }
 
@@ -188,6 +135,7 @@ class AuthService {
     String? guardianName,
     String? guardianPhone,
     bool hasAcceptedTerms = true,
+    Map<String, bool>? consents,
   }) async {
     try {
       final UserCredential credential =
@@ -213,10 +161,12 @@ class AuthService {
       final calculatedAge = age ?? (birthDate != null ? (DateTime.now().year - birthDate.year) : null);
       final under18 = isUnder18 || (calculatedAge != null && calculatedAge < 18);
 
-      final isDesignatedAdmin = designatedAdmins.any(
-        (a) => a['email']!.toLowerCase() == email.trim().toLowerCase(),
-      );
-      final assignedRole = isDesignatedAdmin ? UserRole.admin : UserRole.fromString(role);
+      // GÜVENLİK: Kayıt anında e-posta henüz doğrulanmamıştır; bu yüzden
+      // hiçbir hesap kayıt olurken admin olamaz ve kayıt ekranından gelen rol
+      // değerine güvenilmez. Tanımlı admin, e-postasını doğrulayıp giriş
+      // yaptığında [syncAndPromoteAdminUsers] ile yetkilendirilir.
+      const isDesignatedAdmin = false;
+      const assignedRole = UserRole.actor;
 
       final userModel = UserModel(
         uid: user.uid,
@@ -245,8 +195,14 @@ class AuthService {
         ...userModel.toMap(),
         'isActive': isDesignatedAdmin || !under18,
         'isHidden': under18,
-        'approvalStatus': isDesignatedAdmin ? 'approved' : (under18 ? 'pending_guardian' : 'pending'),
-        if (isDesignatedAdmin) 'approvedAt': FieldValue.serverTimestamp(),
+        'approvalStatus': under18 ? 'pending_guardian' : 'pending',
+        // KVKK: onaylanan metinler ve rızalar ispat için saklanır
+        if (consents != null)
+          'consents': {
+            ...consents,
+            'acceptedAt': FieldValue.serverTimestamp(),
+            'textVersion': kLegalTextsVersion,
+          },
       });
 
       // Admin kullanıcılarına yeni üye bildirimi gönder
@@ -282,9 +238,8 @@ class AuthService {
       final user = credential.user;
       if (user == null) throw Exception('Giriş yapılamadı.');
 
-      final isDesignatedAdmin = designatedAdmins.any(
-        (a) => a['email']!.toLowerCase() == email.trim().toLowerCase(),
-      );
+      // Sadece e-postası doğrulanmış tanımlı adminler yetki alır
+      final isDesignatedAdmin = isVerifiedDesignatedAdmin(user);
 
       final doc = await _firestore
           .collection(AppConstants.usersCollection)
@@ -346,6 +301,16 @@ class AuthService {
       guardianName: guardianName,
       guardianPhone: guardianPhone,
       signIn: () async {
+        // Web'de google_sign_in paketi serverClientId desteklemez ve
+        // "Assertion failed: serverClientId is not supported on Web" hatası
+        // verir. Web'de Firebase Auth'un kendi Google açılır penceresi kullanılır.
+        if (kIsWeb) {
+          final provider = GoogleAuthProvider()
+            ..addScope('email')
+            ..setCustomParameters({'prompt': 'select_account'});
+          return _auth.signInWithPopup(provider);
+        }
+
         final GoogleSignIn googleSignIn = GoogleSignIn(
           serverClientId: '977939722051-78bh3stbhgh85rsub18ra2c0566l1gq7.apps.googleusercontent.com',
         );
@@ -474,38 +439,32 @@ class AuthService {
       final fullName = user.displayName ?? placeholderName;
       final photoUrl = user.photoURL;
 
-      // Özel Admin listesinde bu e-posta adresi var mı?
-      final designatedAdmin = designatedAdmins.firstWhere(
-        (a) => a['email']!.toLowerCase() == email.toLowerCase(),
-        orElse: () => {},
-      );
-      final isDesignatedAdmin = designatedAdmin.isNotEmpty;
+      // Özel Admin listesinde bu e-posta var mı? (sadece doğrulanmış e-posta)
+      final isDesignatedAdmin = isVerifiedDesignatedAdmin(user);
+      final designatedAdmin = <String, String>{
+        if (isDesignatedAdmin) 'name': _designatedAdminName(email) ?? fullName,
+      };
 
-      // 1. Önce UID ile Firestore dokümanını kontrol et
-      var doc = await _firestore
+      // Kullanıcının belgesi yalnızca kendi UID'si ile aranır.
+      // GÜVENLİK: Önceki sürüm aynı e-postaya sahip BAŞKA bir belgeyi bulup
+      // verisini bu hesaba taşıyor ve eski belgeyi siliyordu (hesap/veri
+      // devralma riski).
+      final doc = await _firestore
           .collection(AppConstants.usersCollection)
           .doc(uid)
           .get();
 
-      // 2. Bulunamadıysa e-posta adresine göre arama yap
-      if (!doc.exists && email.isNotEmpty) {
-        final snap = await _firestore
-            .collection(AppConstants.usersCollection)
-            .where('email', isEqualTo: email)
-            .limit(1)
-            .get();
-
-        if (snap.docs.isNotEmpty) {
-          doc = snap.docs.first;
-        }
-      }
-
       if (doc.exists && doc.data() != null) {
         final data = doc.data()!;
         final updateData = <String, dynamic>{
-          'email': email,
           'updatedAt': FieldValue.serverTimestamp(),
         };
+        // E-posta hassas alan → private alt doküman
+        if (email.isNotEmpty) {
+          try {
+            await writePrivateFields(_firestore, uid, {'email': email});
+          } catch (_) {}
+        }
 
         if ((data['fullName'] as String? ?? '').isEmpty || data['fullName'] == placeholderName) {
           updateData['fullName'] = isDesignatedAdmin
@@ -523,24 +482,8 @@ class AuthService {
           updateData['isActive'] = true;
         }
 
-        // Eğer eski doküman farklı ID ile bulunduysa (e-posta araması), veriyi yeni UID'ye taşı
-        if (doc.id != uid) {
-          final migratedData = Map<String, dynamic>.from(data);
-          migratedData.addAll(updateData);
-          migratedData['uid'] = uid;
-
-          // Eski dokümanın hassas alanları da yeni UID'ye taşınır
-          migratedData.addAll(await readPrivateFields(_firestore, doc.id));
-
-          await _writeUser(uid, migratedData);
-          try { await privateProfileRef(_firestore, doc.id).delete(); } catch (_) {}
-          try { await _firestore.collection(AppConstants.usersCollection).doc(doc.id).delete(); } catch (_) {}
-
-          return await getUserData(uid);
-        } else {
-          await _firestore.collection(AppConstants.usersCollection).doc(uid).set(updateData, SetOptions(merge: true));
-          return await getUserData(uid);
-        }
+        await _firestore.collection(AppConstants.usersCollection).doc(uid).set(updateData, SetOptions(merge: true));
+        return await getUserData(uid);
       } else {
         if (onCreateNewUser != null) {
           return await onCreateNewUser(
@@ -593,7 +536,11 @@ class AuthService {
       rethrow;
     } on FirebaseAuthException catch (e) {
       // Apple sayfası kapatıldı (ASAuthorizationError 1001)
-      if (e.code.contains('cancel') || (e.message ?? '').contains('1001')) return null;
+      if (e.code.contains('cancel') ||
+          e.code == 'popup-closed-by-user' ||
+          (e.message ?? '').contains('1001')) {
+        return null;
+      }
       throw _handleAuthError(e);
     } catch (e) {
       final errStr = e.toString();
@@ -622,11 +569,10 @@ class AuthService {
     final fullName = user.displayName ?? 'Google Kullanıcısı';
     final photoUrl = user.photoURL;
 
-    final designatedAdmin = designatedAdmins.firstWhere(
-      (a) => a['email']!.toLowerCase() == email.toLowerCase(),
-      orElse: () => {},
-    );
-    final isDesignatedAdmin = designatedAdmin.isNotEmpty;
+    final isDesignatedAdmin = isVerifiedDesignatedAdmin(user);
+    final designatedAdmin = <String, String>{
+      if (isDesignatedAdmin) 'name': _designatedAdminName(email) ?? fullName,
+    };
 
     return _createGoogleUserDocument(
       uid: uid,
@@ -738,7 +684,10 @@ class AuthService {
       'updatedAt': FieldValue.serverTimestamp(),
     };
 
-    if (birthDate != null) updateData['birthDate'] = birthDate.toIso8601String();
+    // Doğum tarihi hassas alandır → private alt doküman
+    if (birthDate != null) {
+      await writePrivateFields(_firestore, uid, {'birthDate': birthDate.toIso8601String()});
+    }
     if (calculatedAge != null) updateData['age'] = calculatedAge;
     if (isUnder18 != null || calculatedAge != null) {
       updateData['isUnder18'] = under18;
@@ -771,10 +720,10 @@ class AuthService {
         } catch (_) {}
       }
 
+      // GÜVENLİK: Rol bu yolla değiştirilemez (yalnızca admin paneli).
+      // E-posta hassas alan olarak private alt dokümanda tutulur.
       final updateData = <String, dynamic>{
-        'email': email.trim(),
         'fullName': fullName.trim(),
-        'role': role,
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
@@ -782,6 +731,7 @@ class AuthService {
           .collection(AppConstants.usersCollection)
           .doc(uid)
           .set(updateData, SetOptions(merge: true));
+      await writePrivateFields(_firestore, uid, {'email': email.trim()});
 
       return await getUserData(uid);
     } catch (e) {

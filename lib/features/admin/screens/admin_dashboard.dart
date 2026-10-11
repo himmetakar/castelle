@@ -342,7 +342,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
           );
         }
 
-        final docs = snap.data!.docs;
+        // Panelden silinen (Silinenler'deki) kayıtlar istatistiğe dahil edilmez
+        final docs = snap.data!.docs
+            .where((d) => d.data()['isDeleted'] != true)
+            .toList();
         final total = docs.length;
 
         // Durum sayaçları
@@ -441,7 +444,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
               Row(
                 children: [
                   _statChip(
-                    'Opsiyonlu',
+                    'Opsiyon',
                     options,
                     Colors.purple,
                     status: 'options',
@@ -691,10 +694,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       Navigator.pop(context);
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const AssignModeratorScreen()),
-                      );
-                    },
-                  ),
+                        MaterialPageRoute(builder: (_) => const AssignModeratorScreen()),
+                      );
+                    },
+                  ),
                   StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                       stream: FirebaseFirestore.instance
                           .collection('moderator_approvals')
@@ -731,8 +734,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                               MaterialPageRoute(builder: (_) => const ModeratorApprovalsScreen()),
                             );
                           },
-                        );
-                      },
+                        );
+                      },
                     ),
                   
                   // Yeni Üyeler with StreamBuilder for pending badge

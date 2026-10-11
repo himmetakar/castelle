@@ -378,6 +378,7 @@ class _StatActorsListScreenState extends State<StatActorsListScreen> {
           // Benzersiz kullanıcıları çıkar
           final uniqueActors = <String, Map<String, String>>{};
           for (final doc in snap.data!.docs) {
+            if (doc.data()['isDeleted'] == true) continue;
             final data = doc.data();
             final actorId = data['actorId'] as String?;
             final actorName = data['actorName'] as String?;

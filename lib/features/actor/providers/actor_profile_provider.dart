@@ -1,12 +1,12 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart' show XFile;
 import 'package:path_provider/path_provider.dart';
 import 'package:video_compress/video_compress.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:castelle/core/utils/platform_utils.dart';
-import 'package:castelle/core/utils/video_utils.dart';
 import 'package:castelle/core/models/actor_profile_model.dart';
 import 'package:castelle/core/services/actor_profile_service.dart';
+import 'package:castelle/core/utils/media_upload.dart';
 
 // Castelle - Actor Profile Provider
 // Oyuncu profil durum yönetimi
@@ -38,6 +38,11 @@ class ActorProfileProvider extends ChangeNotifier {
   bool get isProcessing => _isCompressing || _isUploading;
 
   /// Profili yükle
+  /// Son yükleme başarısız oldu mu? (ağ/yetki hatası). true iken kayıt
+  /// engellenir: boş/yarım profil sunucudaki gerçek profili ezmesin.
+  bool _loadFailed = false;
+  bool get loadFailed => _loadFailed;
+
   Future<void> loadProfile(String uid) async {
     _isLoading = true;
     _errorMessage = null;
@@ -48,6 +53,7 @@ class ActorProfileProvider extends ChangeNotifier {
       if (res != null) {
         _profile = res;
       } else {
+        // Belge gerçekten yok (ilk kez profil dolduruluyor) → boş iskelet
         _profile = ActorProfileModel(
           uid: uid,
           fullName: '',
@@ -55,23 +61,40 @@ class ActorProfileProvider extends ChangeNotifier {
           phone: '',
         );
       }
+      _loadFailed = false;
       _isLoading = false;
       notifyListeners();
     } catch (e) {
+      // ESKİ HATA: burada boş bir profil oluşturuluyordu; kullanıcı "her şey
+      // silinmiş" görüyor, kaydedince boş liste/alanlar sunucuya yazılıyordu.
+      // Artık mevcut profil (varsa) korunur, kayıt engellenir.
       _isLoading = false;
-      _errorMessage = e.toString();
-      _profile ??= ActorProfileModel(
-        uid: uid,
-        fullName: '',
-        email: '',
-        phone: '',
-      );
+      _loadFailed = true;
+      _errorMessage =
+          'Profiliniz sunucudan yüklenemedi. İnternet bağlantınızı kontrol edip sayfayı yenileyin.';
+      debugPrint('❌ [loadProfile] $e');
       notifyListeners();
     }
   }
 
+  /// Yükleme/upload öncesi profilin elde olduğundan emin ol. Profil henüz
+  /// yüklenmemişse önce sunucudan OKUR; okunamazsa false döner (boş iskeletle
+  /// kaydedip gerçek verinin üzerine yazmamak için).
+  Future<bool> _ensureProfile(String? fallbackUid) async {
+    if (_profile != null && !_loadFailed) return true;
+    if (fallbackUid == null) return false;
+    await loadProfile(fallbackUid);
+    return _profile != null && !_loadFailed;
+  }
+
   /// Profili kaydet
   Future<bool> saveProfile(ActorProfileModel profile) async {
+    if (_loadFailed) {
+      _errorMessage =
+          'Profiliniz sunucudan yüklenemediği için kaydedilemedi. İnternet bağlantınızı kontrol edip sayfayı yenileyin.';
+      notifyListeners();
+      return false;
+    }
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
@@ -83,19 +106,22 @@ class ActorProfileProvider extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
-      final errorStr = e.toString().toLowerCase();
-      if (errorStr.contains('permission-denied') ||
-          errorStr.contains('permission') ||
-          errorStr.contains('denied') ||
-          errorStr.contains('insufficient')) {
-        // Local simulation fallback for demo purposes if rules block write
-        _profile = profile;
-        _isLoading = false;
-        notifyListeners();
-        return true;
-      }
+      // ESKİ HATA: permission-denied gelince "demo" diye yerelde kaydedilmiş
+      // gibi gösterip true dönüyordu. Kullanıcı profili %70 dolu görüyor,
+      // uygulamayı kapatıp açınca her şey sıfırlanıyordu; yüklenen foto/video
+      // URL'leri de aynı yoldan kaybolyordu. Artık hata açıkça gösterilir.
       _isLoading = false;
-      _errorMessage = errorStr.replaceAll('Exception: ', '');
+      final raw = e.toString();
+      final lower = raw.toLowerCase();
+      if (lower.contains('permission-denied') || lower.contains('permission denied')) {
+        _errorMessage =
+            'Profil sunucuya kaydedilemedi (yetki hatası). Lütfen uygulamayı güncelleyip tekrar deneyin; sorun sürerse yöneticiye bildirin.';
+      } else if (lower.contains('unavailable') || lower.contains('network') || lower.contains('socket')) {
+        _errorMessage = 'İnternet bağlantısı yok ya da sunucuya ulaşılamadı. Bağlantınızı kontrol edip tekrar deneyin.';
+      } else {
+        _errorMessage = raw.replaceAll('Exception: ', '');
+      }
+      debugPrint('❌ [saveProfile] $raw');
       notifyListeners();
       return false;
     }
@@ -142,12 +168,10 @@ class ActorProfileProvider extends ChangeNotifier {
 
   /// Profil fotoğrafı yükle
   Future<bool> uploadProfilePhoto(XFile file, {String? fallbackUid}) async {
-    if (_profile == null) {
-      if (fallbackUid != null) {
-        _profile = ActorProfileModel(uid: fallbackUid, fullName: '', email: '', phone: '');
-      } else {
-        return false;
-      }
+    if (!await _ensureProfile(fallbackUid)) {
+      _errorMessage ??= 'Profil yüklenemedi, lütfen tekrar deneyin.';
+      notifyListeners();
+      return false;
     }
     _isLoading = true;
     _errorMessage = null;
@@ -171,12 +195,10 @@ class ActorProfileProvider extends ChangeNotifier {
 
   /// Portfolyo galerisine fotoğraf yükle
   Future<bool> uploadGalleryPhoto(XFile file, int index, {String? fallbackUid}) async {
-    if (_profile == null) {
-      if (fallbackUid != null) {
-        _profile = ActorProfileModel(uid: fallbackUid, fullName: '', email: '', phone: '');
-      } else {
-        return false;
-      }
+    if (!await _ensureProfile(fallbackUid)) {
+      _errorMessage ??= 'Profil yüklenemedi, lütfen tekrar deneyin.';
+      notifyListeners();
+      return false;
     }
     _isLoading = true;
     _errorMessage = null;
@@ -206,12 +228,10 @@ class ActorProfileProvider extends ChangeNotifier {
 
   /// Portfolyo galerisine birden fazla fotoğraf yükle
   Future<bool> uploadMultipleGalleryPhotos(List<XFile> files, {String? fallbackUid}) async {
-    if (_profile == null) {
-      if (fallbackUid != null) {
-        _profile = ActorProfileModel(uid: fallbackUid, fullName: '', email: '', phone: '');
-      } else {
-        return false;
-      }
+    if (!await _ensureProfile(fallbackUid)) {
+      _errorMessage ??= 'Profil yüklenemedi, lütfen tekrar deneyin.';
+      notifyListeners();
+      return false;
     }
 
     if (files.isEmpty) return true;
@@ -270,19 +290,17 @@ class ActorProfileProvider extends ChangeNotifier {
 
   /// Profil videosu (Tanıtım, Showreel, Performans, Mimik) sıkıştır ve yükle
   Future<bool> uploadAndCompressProfileVideo(XFile videoFile, String videoKey, {String? fallbackUid}) async {
-    if (_profile == null) {
-      if (fallbackUid != null) {
-        _profile = ActorProfileModel(uid: fallbackUid, fullName: '', email: '', phone: '');
-      } else {
-        return false;
-      }
+    if (!await _ensureProfile(fallbackUid)) {
+      _errorMessage ??= 'Profil yüklenemedi, lütfen tekrar deneyin.';
+      notifyListeners();
+      return false;
     }
     _errorMessage = null;
 
      // Video süre kontrolü (Showreel: 4dk, Performans: 2dk, Tanıtım: 30s, Mimik: Limitsiz/50s)
      int durationSec = 0;
      try {
-       final ctrl = localVideoController(videoFile.path);
+       final ctrl = MediaUpload.videoController(videoFile.path);
        await ctrl.initialize();
        durationSec = ctrl.value.duration.inSeconds;
        await ctrl.dispose();
@@ -318,60 +336,15 @@ class ActorProfileProvider extends ChangeNotifier {
     _compressProgress = 0.0;
     notifyListeners();
 
+    XFile persistentFile;
     final fileName = '${_profile!.uid}_${videoKey}_${DateTime.now().millisecondsSinceEpoch}.mp4';
 
     try {
-      // Web: sıkıştırma (video_compress) ve yerel kopya yok; dosya doğrudan yüklenir
-      final XFile uploadFile =
-          kIsWeb ? videoFile : XFile((await _compressAndPersist(videoFile, fileName)).path);
-
-      _compressProgress = 1.0;
-      _isCompressing = false;
-      _isUploading = true;
-      _uploadProgress = 0.0;
-      notifyListeners();
-
-      final downloadUrl = await _service.uploadProfileMedia(
-        file: uploadFile,
-        uid: _profile!.uid,
-        type: 'video',
-        key: videoKey,
-        onProgress: (progress) {
-          _uploadProgress = progress;
-          notifyListeners();
-        },
-      );
-
-      _isUploading = false;
-      notifyListeners();
-
-      ActorProfileModel updatedProfile;
-      if (videoKey == 'introVideo') {
-        updatedProfile = _profile!.copyWith(introVideoUrl: downloadUrl);
-      } else if (videoKey == 'showreelVideo' || videoKey == 'showreel') {
-        updatedProfile = _profile!.copyWith(showreelVideoUrl: downloadUrl);
-      } else if (videoKey == 'performanceVideo') {
-        updatedProfile = _profile!.copyWith(performanceVideoUrl: downloadUrl);
-      } else if (videoKey == 'expressionVideo') {
-        updatedProfile = _profile!.copyWith(expressionVideoUrl: downloadUrl);
+      if (kIsWeb) {
+        // Web'de sıkıştırma (video_compress) ve yerel klasör (path_provider)
+        // yok — video olduğu gibi yüklenir.
+        persistentFile = videoFile;
       } else {
-        return false;
-      }
-
-      return await saveProfile(updatedProfile);
-    } catch (e) {
-      _isCompressing = false;
-      _isUploading = false;
-      _errorMessage = 'İşlem hatası: $e';
-      notifyListeners();
-      return false;
-    }
-  }
-
-  /// Mobil: videoyu sıkıştırıp uygulama klasörüne kalıcı kopyalar.
-  Future<File> _compressAndPersist(XFile videoFile, String fileName) async {
-    File persistentFile;
-    {
       final appDir = await getApplicationDocumentsDirectory();
       final videosDir = Directory('${appDir.path}/profile_videos');
       if (!await videosDir.exists()) {
@@ -414,21 +387,62 @@ class ActorProfileProvider extends ChangeNotifier {
       }
 
       if (compressedFile != null) {
-        persistentFile = await compressedFile.copy(destPath);
+        persistentFile = XFile((await compressedFile.copy(destPath)).path);
       } else {
         for (double p = 0.2; p <= 1.0; p += 0.2) {
           _compressProgress = p;
           notifyListeners();
           await Future.delayed(const Duration(milliseconds: 50));
         }
-        persistentFile = await File(videoFile.path).copy(destPath);
+        persistentFile = XFile((await File(videoFile.path).copy(destPath)).path);
       }
 
       try {
         await VideoCompress.deleteAllCache();
       } catch (_) {}
+      }
+
+      _compressProgress = 1.0;
+      _isCompressing = false;
+      _isUploading = true;
+      _uploadProgress = 0.0;
+      notifyListeners();
+
+      final downloadUrl = await _service.uploadProfileMedia(
+        file: persistentFile,
+        uid: _profile!.uid,
+        type: 'video',
+        key: videoKey,
+        onProgress: (progress) {
+          _uploadProgress = progress;
+          notifyListeners();
+        },
+      );
+
+      _isUploading = false;
+      notifyListeners();
+
+      ActorProfileModel updatedProfile;
+      if (videoKey == 'introVideo') {
+        updatedProfile = _profile!.copyWith(introVideoUrl: downloadUrl);
+      } else if (videoKey == 'showreelVideo' || videoKey == 'showreel') {
+        updatedProfile = _profile!.copyWith(showreelVideoUrl: downloadUrl);
+      } else if (videoKey == 'performanceVideo') {
+        updatedProfile = _profile!.copyWith(performanceVideoUrl: downloadUrl);
+      } else if (videoKey == 'expressionVideo') {
+        updatedProfile = _profile!.copyWith(expressionVideoUrl: downloadUrl);
+      } else {
+        return false;
+      }
+
+      return await saveProfile(updatedProfile);
+    } catch (e) {
+      _isCompressing = false;
+      _isUploading = false;
+      _errorMessage = 'İşlem hatası: $e';
+      notifyListeners();
+      return false;
     }
-    return persistentFile;
   }
 
   /// Profil videosunu sil (Tanıtım, Showreel, Performans, Mimik)

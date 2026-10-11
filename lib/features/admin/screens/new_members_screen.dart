@@ -5,6 +5,9 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:castelle/core/theme/app_theme.dart';
 import 'package:castelle/core/models/actor_profile_model.dart';
 import 'package:castelle/core/services/actor_profile_service.dart';
+import 'package:castelle/core/providers/auth_provider.dart';
+import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Admin — Onay Bekleyen Yeni Üyeler Ekranı
 class NewMembersScreen extends StatefulWidget {
@@ -155,7 +158,14 @@ class _ActorApprovalCardState extends State<_ActorApprovalCard> {
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      if (widget.actor.adminNote != null &&
+                      if (widget.actor.isUnder18 &&
+                          !widget.actor.isGuardianApproved)
+                        _chip(
+                          Icons.family_restroom,
+                          'Veli Onayı Bekliyor',
+                          AppTheme.error,
+                        )
+                      else if (widget.actor.adminNote != null &&
                           widget.actor.adminNote!.isNotEmpty)
                         _chip(
                           Icons.edit_note,
@@ -241,6 +251,7 @@ class _ActorApprovalCardState extends State<_ActorApprovalCard> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: AppTheme.surfaceCard,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -252,8 +263,62 @@ class _ActorApprovalCardState extends State<_ActorApprovalCard> {
         onApprove: _approve,
         onReject: _reject,
         onRequestEdit: _requestEdit,
+        onGuardianApprove: _approveGuardian,
       ),
     );
+  }
+
+  /// Veli ile telefonla görüşülüp onay alındıktan sonra admin işaretler.
+  Future<void> _approveGuardian() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surfaceCard,
+        title: Text('Veli Onayı Alındı mı?',
+            style: GoogleFonts.outfit(fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+        content: Text(
+          '${widget.actor.fullName} 18 yaşından küçük. Veli/ebeveyn '
+          '(${widget.actor.guardianName ?? '-'} · ${widget.actor.guardianPhone ?? '-'}) ile '
+          'görüşüp uygulamayı kullanmasına ve profilinin yayınlanmasına onay aldığınızı '
+          'teyit ediyor musunuz?\n\nBu kayıt KVKK için saklanır (kim, ne zaman).',
+          style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textSecondary, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Vazgeç'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.success, foregroundColor: Colors.white),
+            child: const Text('Evet, Onay Alındı'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _isLoading = true);
+    try {
+      final adminName = context.read<AuthProvider>().user?.fullName;
+      await widget.service.approveGuardian(widget.actor.uid, approvedByName: adminName);
+      if (mounted) {
+        Navigator.of(context).popUntil((route) => route.isFirst || route.settings.name == '/new_members');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${widget.actor.fullName} için veli onayı kaydedildi. Şimdi profili onaylayabilirsiniz.'),
+            backgroundColor: AppTheme.success,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Hata: $e'), backgroundColor: AppTheme.error),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   Future<void> _approve() async {
@@ -395,6 +460,7 @@ class _ProfileDetailSheet extends StatelessWidget {
   final VoidCallback onApprove;
   final VoidCallback onReject;
   final Function(String) onRequestEdit;
+  final VoidCallback onGuardianApprove;
 
   const _ProfileDetailSheet({
     required this.actor,
@@ -403,7 +469,10 @@ class _ProfileDetailSheet extends StatelessWidget {
     required this.onApprove,
     required this.onReject,
     required this.onRequestEdit,
+    required this.onGuardianApprove,
   });
+
+  bool get _guardianPending => actor.isUnder18 && !actor.isGuardianApproved;
 
   @override
   Widget build(BuildContext context) {
@@ -476,6 +545,12 @@ class _ProfileDetailSheet extends StatelessWidget {
                   // Profil kartı
                   _buildProfileHeader(context),
                   const SizedBox(height: 20),
+
+                  // 18 yaş altı: veli bilgisi + onay durumu
+                  if (actor.isUnder18) ...[
+                    _buildGuardianBox(context),
+                    const SizedBox(height: 16),
+                  ],
 
                   // Admin notu varsa göster
                   if (actor.adminNote != null &&
@@ -743,6 +818,75 @@ class _ProfileDetailSheet extends StatelessWidget {
     );
   }
 
+  Widget _buildGuardianBox(BuildContext context) {
+    final pending = _guardianPending;
+    final color = pending ? AppTheme.error : AppTheme.success;
+    final phone = actor.guardianPhone;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.family_restroom, size: 16, color: color),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  pending
+                      ? '18 YAŞ ALTI — VELİ ONAYI BEKLENİYOR'
+                      : '18 YAŞ ALTI — VELİ ONAYI ALINDI',
+                  style: GoogleFonts.outfit(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: color,
+                    letterSpacing: 0.4,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Veli: ${actor.guardianName ?? 'Belirtilmemiş'}',
+            style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textPrimary),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Telefon: ${phone ?? 'Belirtilmemiş'}',
+                  style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textPrimary),
+                ),
+              ),
+              if (phone != null && phone.isNotEmpty)
+                TextButton.icon(
+                  onPressed: () => launchUrl(Uri.parse('tel:$phone')),
+                  icon: const Icon(Icons.call, size: 16),
+                  label: const Text('Ara'),
+                ),
+            ],
+          ),
+          if (pending) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Veli ile görüşüp onay aldıktan sonra alttaki "Veli Onayı" '
+              'düğmesini kullanın; ardından profil normal şekilde onaylanır.',
+              style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textSecondary, height: 1.4),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _sectionTitle(String t) => Text(
         t,
         style: GoogleFonts.outfit(
@@ -754,8 +898,10 @@ class _ProfileDetailSheet extends StatelessWidget {
       );
 
   Widget _buildActionButtons(BuildContext context) {
+    // Alt sistem çubuğu (Android gesture/nav bar) butonları örtmesin.
+    final bottomInset = MediaQuery.of(context).viewPadding.bottom;
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      padding: EdgeInsets.fromLTRB(16, 12, 16, 16 + bottomInset),
       decoration: BoxDecoration(
         color: AppTheme.surfaceCard,
         border: Border(
@@ -804,15 +950,20 @@ class _ProfileDetailSheet extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
-                // Onayla
+                // Onayla — 18 yaş altı ve veli onayı yoksa önce veli onayı
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: onApprove,
-                    icon: const Icon(Icons.check_circle_outline, size: 16),
-                    label:
-                        Text('Onayla', style: GoogleFonts.outfit(fontSize: 13)),
+                    onPressed: _guardianPending ? onGuardianApprove : onApprove,
+                    icon: Icon(
+                        _guardianPending
+                            ? Icons.family_restroom
+                            : Icons.check_circle_outline,
+                        size: 16),
+                    label: Text(_guardianPending ? 'Veli Onayı' : 'Onayla',
+                        style: GoogleFonts.outfit(fontSize: 13)),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.success,
+                      backgroundColor:
+                          _guardianPending ? AppTheme.error : AppTheme.success,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       elevation: 0,

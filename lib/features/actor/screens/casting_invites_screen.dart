@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:castelle/core/services/media_upload.dart';
+import 'package:castelle/core/utils/media_upload.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:castelle/core/theme/app_theme.dart';
+import 'package:castelle/core/widgets/project_logo.dart';
 import 'package:castelle/core/models/notification_model.dart';
 import 'package:castelle/core/models/project_model.dart';
 import 'package:castelle/core/models/audition_model.dart';
@@ -43,7 +44,7 @@ class _CastingInvitesScreenState extends State<CastingInvitesScreen> {
     setState(() => _loadingAllProjects = true);
     _loadEndedProjects();
     try {
-      final projects = await _projectService.getActiveProjects();
+      final projects = await _projectService.getActiveProjects(publicOnly: true);
       setState(() {
         _allProjects = projects;
         _loadingAllProjects = false;
@@ -288,73 +289,11 @@ class _CastingInvitesScreenState extends State<CastingInvitesScreen> {
   }
 
   Widget _buildProjectImage(ProjectModel project, {double size = 80.0}) {
-    final primaryImageUrl = project.primaryImageUrl;
-
-    if (primaryImageUrl == null || primaryImageUrl.isEmpty) {
-      // Castelle logosu göster
-      return Container(
-        width: size,
-        height: size,
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: AppTheme.border.withValues(alpha: 0.3),
-            width: 0.5,
-          ),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: Image.asset(
-            'assets/images/ana-logo-siyah.png',
-            fit: BoxFit.contain,
-            errorBuilder: (_, _, _) => Icon(
-              Icons.movie_creation_outlined,
-              size: size * 0.4,
-              color: AppTheme.textTertiary,
-            ),
-          ),
-        ),
-      );
-    }
-
-    Widget imageWidget;
-    if (primaryImageUrl.startsWith('http')) {
-      imageWidget = Image.network(
-        primaryImageUrl,
-        fit: BoxFit.cover,
-        errorBuilder: (_, _, _) => Image.asset(
-          'assets/images/ana-logo-siyah.png',
-          fit: BoxFit.contain,
-        ),
-      );
-    } else {
-      imageWidget = localImage(
-        primaryImageUrl,
-        fit: BoxFit.cover,
-        errorBuilder: (_, _, _) => Image.asset(
-          'assets/images/ana-logo-siyah.png',
-          fit: BoxFit.contain,
-        ),
-      );
-    }
-
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: AppTheme.border.withValues(alpha: 0.3),
-          width: 0.5,
-        ),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(11.0),
-        child: imageWidget,
-      ),
+    // Logo her oranda (uzun/yatay/dikey) kırpılmadan kutuya sığar.
+    return ProjectLogo(
+      imageUrl: project.primaryImageUrl,
+      size: size,
+      padding: 8,
     );
   }
 
@@ -584,7 +523,7 @@ class _CastingInvitesScreenState extends State<CastingInvitesScreen> {
               ),
             );
           } else {
-            imageWidget = localImage(
+            imageWidget = MediaUpload.image(
               primaryImageUrl,
               fit: BoxFit.contain,
               errorBuilder: (_, _, _) => Image.asset(

@@ -1,14 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:castelle/core/models/user_model.dart';
 import 'package:castelle/core/services/auth_service.dart';
 import 'package:castelle/core/services/push_notification_service.dart';
 import 'package:castelle/core/constants/user_roles.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:castelle/core/constants/app_constants.dart';
-import 'package:castelle/core/services/private_profile_fields.dart';
 
 
 /// Castelle - Auth Provider
@@ -125,6 +122,7 @@ class AuthProvider extends ChangeNotifier {
     bool isUnder18 = false,
     String? guardianName,
     String? guardianPhone,
+    Map<String, bool>? consents,
   }) async {
     _status = AuthStatus.loading;
     _errorMessage = null;
@@ -140,6 +138,7 @@ class AuthProvider extends ChangeNotifier {
         isUnder18: isUnder18,
         guardianName: guardianName,
         guardianPhone: guardianPhone,
+        consents: consents,
       );
       _status = AuthStatus.authenticated;
       
@@ -445,55 +444,35 @@ class AuthProvider extends ChangeNotifier {
       if (firebaseUser == null) {
         throw Exception('Giriş yapmış kullanıcı bulunamadı.');
       }
-      final uid = firebaseUser.uid;
-
       // 0. Apple ile giriş yapmışsa Apple token'ını iptal et (App Store 5.1.1(v)).
       // Kullanıcı Apple onayını iptal ederse hesap silinmez.
       await _authService.revokeAppleTokenIfNeeded();
 
-      // 1. Önce kullanıcının kendi dokümanındaki tüm kişisel verileri temizle ve inaktif/pending yap
-      try {
-        await FirebaseFirestore.instance
-            .collection(AppConstants.usersCollection)
-            .doc(uid)
-            .set({
-          'uid': uid,
-          'email': firebaseUser.email ?? '',
-          'fullName': 'Silinmiş Kullanıcı',
-          'role': 'actor',
-          'isActive': false,
-          'approvalStatus': 'pending',
-          'deletedAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-      } catch (e) {
-        debugPrint('⚠️ [DeleteAccount] Firestore set uyarısı: $e');
-      }
-
-      // 2. Ardından Firestore dokümanını silmeyi dene.
-      // Alt koleksiyon otomatik silinmez — hassas alanların dokümanı önce silinir.
-      try {
-        await privateProfileRef(FirebaseFirestore.instance, uid).delete();
-      } catch (e) {
-        debugPrint('⚠️ [DeleteAccount] Private doküman silme uyarısı: $e');
-      }
-      try {
-        await FirebaseFirestore.instance
-            .collection(AppConstants.usersCollection)
-            .doc(uid)
-            .delete();
-      } catch (e) {
-        debugPrint('⚠️ [DeleteAccount] Firestore delete uyarısı: $e');
-      }
-
-      // 3. Firebase Auth kullanıcısını sil
+      // 1. Önce Firebase Auth hesabını sil.
+      // KVKK / güvenlik: Önceki sürüm önce Firestore verisini silip ardından
+      // Auth hesabını silmeye çalışıyordu; "requires-recent-login" hatasında
+      // hata yutuluyor, kullanıcıya "silindi" deniyor ama giriş hesabı
+      // açık kalıyordu. Artık Auth silinemezse hiçbir şey silinmez ve
+      // kullanıcıya tekrar giriş yapması söylenir.
+      //
+      // Auth hesabı silinince Cloud Function (functions/index.js →
+      // purgeDeletedUserData) kullanıcının profilini, hassas verilerini,
+      // fotoğraf/videolarını, bildirimlerini ve sohbetlerini sunucu tarafında
+      // siler; başvuru kayıtlarını anonimleştirir.
       try {
         await firebaseUser.delete();
       } on FirebaseAuthException catch (e) {
         if (e.code == 'requires-recent-login') {
-          debugPrint('⚠️ [DeleteAccount] Re-auth gerekebilir: $e');
+          throw Exception(
+            'Güvenliğiniz için hesabınızı silmeden önce çıkış yapıp tekrar giriş yapmanız gerekiyor. '
+            'Lütfen yeniden giriş yaptıktan sonra hesabınızı tekrar silin.',
+          );
         }
-      } catch (_) {}
+        throw Exception('Hesap silinemedi: ${e.message ?? e.code}');
+      }
+
+      // Auth silindikten sonra Firestore'a istemciden erişim kalmaz;
+      // kalan verileri Cloud Function temizler.
 
       // 4. Lokal oturum durumunu tamamen temizle
       _user = null;

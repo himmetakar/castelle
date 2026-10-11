@@ -1,18 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:castelle/core/services/media_upload.dart';
-import 'package:castelle/core/widgets/web_frame.dart';
+import 'package:castelle/core/utils/media_upload.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:video_player/video_player.dart';
-import 'package:chewie/chewie.dart';
 import 'package:castelle/core/widgets/app_shell.dart';
 import 'package:castelle/core/widgets/dashboard_header.dart';
 import 'package:castelle/core/widgets/profile_screen.dart';
 import 'package:castelle/core/theme/app_theme.dart';
+import 'package:castelle/core/widgets/project_logo.dart';
 import 'package:castelle/core/constants/user_roles.dart';
 import 'package:castelle/features/admin/screens/actor_filter_results_screen.dart';
 import 'package:castelle/core/providers/auth_provider.dart';
@@ -31,6 +28,7 @@ import 'package:castelle/features/actor/widgets/nda_agreement_dialog.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
+import 'package:castelle/core/widgets/web_frame.dart';
 
 
 /// Oyuncu / Sanatçı Ana Ekranı
@@ -272,7 +270,7 @@ class _ActorDashboardState extends State<_ActorDashboard> {
     if (!mounted) return;
     setState(() => _loadingProjects = true);
     try {
-      final list = await _projectService.getActiveProjects();
+      final list = await _projectService.getActiveProjects(publicOnly: true);
       if (mounted) {
         setState(() {
           _projects = list;
@@ -515,18 +513,11 @@ class _ActorDashboardState extends State<_ActorDashboard> {
                                 decoration: const BoxDecoration(
                                   shape: BoxShape.circle,
                                 ),
-                                child: ClipOval(
-                                  child: proj.primaryImageUrl != null && proj.primaryImageUrl!.isNotEmpty
-                                      ? CachedNetworkImage(
-                                          imageUrl: proj.primaryImageUrl!,
-                                          fit: BoxFit.cover,
-                                          placeholder: (_, _) => Container(color: Colors.grey[300]),
-                                          errorWidget: (_, _, _) => const Icon(Icons.movie, size: 8, color: Colors.white),
-                                        )
-                                      : Container(
-                                          color: AppTheme.accent,
-                                          child: const Icon(Icons.movie, size: 8, color: Colors.white),
-                                        ),
+                                child: ProjectLogo(
+                                  imageUrl: proj.primaryImageUrl,
+                                  size: 14,
+                                  circle: true,
+                                  showBorder: false,
                                 ),
                               );
                             }).toList(),
@@ -607,19 +598,11 @@ class _ActorDashboardState extends State<_ActorDashboard> {
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: project.primaryImageUrl != null && project.primaryImageUrl!.isNotEmpty
-                                ? CachedNetworkImage(
-                                    imageUrl: project.primaryImageUrl!,
-                                    fit: BoxFit.cover,
-                                    placeholder: (_, _) => Container(color: Colors.grey[300]),
-                                    errorWidget: (_, _, _) => Image.asset('assets/images/ana-logo-siyah.png', fit: BoxFit.contain),
-                                  )
-                                : Container(
-                                    color: Colors.white,
-                                    child: Image.asset('assets/images/ana-logo-siyah.png', fit: BoxFit.contain),
-                                  ),
+                          child: ProjectLogo(
+                            imageUrl: project.primaryImageUrl,
+                            size: 40,
+                            borderRadius: 8,
+                            padding: 3,
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -1189,7 +1172,7 @@ class _ActorDashboardState extends State<_ActorDashboard> {
               ),
             );
           } else {
-            imageWidget = localImage(
+            imageWidget = MediaUpload.image(
               primaryImageUrl,
               fit: BoxFit.contain,
               errorBuilder: (_, _, _) => Image.asset(
@@ -1334,125 +1317,6 @@ class _ActorDashboardState extends State<_ActorDashboard> {
     ProjectDetailsBottomSheet.show(context, project, invite: invite);
   }
 
-}
-
-class _ProjectSampleVideoPlayer extends StatefulWidget {
-  final String videoUrl;
-
-  const _ProjectSampleVideoPlayer({required this.videoUrl});
-
-  @override
-  State<_ProjectSampleVideoPlayer> createState() => _ProjectSampleVideoPlayerState();
-}
-
-class _ProjectSampleVideoPlayerState extends State<_ProjectSampleVideoPlayer> {
-  VideoPlayerController? _videoPlayerController;
-  ChewieController? _chewieController;
-  bool _isInit = false;
-  bool _isLoading = false;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _initPlayer();
-  }
-
-  @override
-  void dispose() {
-    _chewieController?.dispose();
-    _videoPlayerController?.dispose();
-    super.dispose();
-  }
-
-  Future<void> _initPlayer() async {
-    if (!mounted) return;
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
-
-    try {
-      _videoPlayerController = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
-      await _videoPlayerController!.initialize();
-
-      _chewieController = ChewieController(
-        videoPlayerController: _videoPlayerController!,
-        aspectRatio: _videoPlayerController!.value.aspectRatio,
-        autoPlay: false,
-        looping: false,
-        allowFullScreen: true,
-        materialProgressColors: ChewieProgressColors(
-          playedColor: AppTheme.accent,
-          handleColor: AppTheme.accent,
-          backgroundColor: AppTheme.surfaceElevated,
-          bufferedColor: AppTheme.primary.withValues(alpha: 0.3),
-        ),
-      );
-
-      if (mounted) {
-        setState(() {
-          _isInit = true;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _error = 'Video yüklenirken hata oluştu: $e';
-        });
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) =>
-      MaxWidthBox(maxWidth: 640, child: _buildPlayer(context));
-
-  Widget _buildPlayer(BuildContext context) {
-    if (_isLoading) {
-      return Container(
-        height: 200,
-        decoration: BoxDecoration(
-          color: AppTheme.surfaceLight,
-          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        ),
-        child: const Center(
-          child: CircularProgressIndicator(color: AppTheme.accent),
-        ),
-      );
-    }
-
-    if (_error != null) {
-      return Container(
-        height: 200,
-        decoration: BoxDecoration(
-          color: AppTheme.surfaceLight,
-          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        ),
-        child: Center(
-          child: Text(_error!, style: GoogleFonts.inter(color: AppTheme.error, fontSize: 13)),
-        ),
-      );
-    }
-
-    if (_isInit && _chewieController != null) {
-      return Container(
-        height: 200,
-        decoration: BoxDecoration(
-          color: Colors.black,
-          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-          child: Chewie(controller: _chewieController!),
-        ),
-      );
-    }
-
-    return const SizedBox.shrink();
-  }
 }
 
 class MarqueeText extends StatefulWidget {

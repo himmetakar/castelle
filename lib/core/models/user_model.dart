@@ -29,6 +29,10 @@ class UserModel {
   final bool emailVerificationRequired; // Normal e-posta kaydı → aktivasyon e-postası zorunlu mu?
   final String? fcmToken; // Push bildirim token'ı
   final bool ageConfirmed; // 18 yaş sorusu gerçekten cevaplandı mı? (Google ile kayıtta zorunlu doğrulama için)
+  // Admin profil onayı — yalnızca okunur (toMap'e yazılmaz; onay/red
+  // işlemleri kendi update çağrılarıyla yapılır).
+  final String approvalStatus; // 'pending', 'pending_guardian', 'approved', 'rejected'
+  final DateTime? approvedAt;
 
   const UserModel({
     required this.uid,
@@ -55,6 +59,8 @@ class UserModel {
     this.emailVerificationRequired = false,
     this.fcmToken,
     this.ageConfirmed = true,
+    this.approvalStatus = 'pending',
+    this.approvedAt,
   });
 
   /// Firestore'dan UserModel oluştur
@@ -103,6 +109,8 @@ class UserModel {
       // için doğrulanmış kabul edilir — sadece yeni Google kayıtlarında
       // bilinçli olarak false yazılır.
       ageConfirmed: map['ageConfirmed'] ?? true,
+      approvalStatus: (map['approvalStatus'] as String?) ?? 'pending',
+      approvedAt: parseDate(map['approvedAt']),
     );
   }
 
@@ -184,6 +192,8 @@ class UserModel {
       emailVerificationRequired: emailVerificationRequired ?? this.emailVerificationRequired,
       fcmToken: fcmToken ?? this.fcmToken,
       ageConfirmed: ageConfirmed ?? this.ageConfirmed,
+      approvalStatus: approvalStatus,
+      approvedAt: approvedAt,
     );
   }
 

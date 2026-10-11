@@ -1,7 +1,7 @@
 name: castelle
 description: "Castelle - Premium Casting Agency SaaS Platform"
 publish_to: 'none'
-version: 2.0.3+23
+version: 2.0.4+25
 
 environment:
   sdk: ^3.11.0
@@ -25,6 +25,10 @@ dependencies:
   cloud_firestore: ^5.6.6
   firebase_storage: ^12.4.4
   firebase_messaging: ^15.2.4
+  # Güvenlik: yalnızca gerçek Castelle uygulamasından gelen istekleri kabul et
+  firebase_app_check: ^0.3.2+10
+  # Sahadaki çökmeleri/hataları otomatik raporlar (Firebase Console → Crashlytics)
+  firebase_crashlytics: ^4.3.10
   google_sign_in: ^6.2.1
 
   # State Management
@@ -56,6 +60,8 @@ dependencies:
   pdf: ^3.11.1
   dio: ^5.7.0
   url_launcher: ^6.3.1
+  # Zorunlu güncelleme kontrolü ve sürüm damgası için uygulama sürümü
+  package_info_plus: ^9.0.0
   flutter_tts: ^4.2.5
   wakelock_plus: ^1.5.2
 

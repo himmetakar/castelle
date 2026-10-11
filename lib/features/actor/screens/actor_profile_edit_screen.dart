@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:castelle/core/services/media_upload.dart';
 import 'package:castelle/core/widgets/web_frame.dart';
-import 'package:castelle/core/utils/video_utils.dart';
 import 'package:castelle/core/utils/platform_utils.dart';
 import 'package:flutter/services.dart';
+import 'package:castelle/core/utils/media_upload.dart';
+import 'package:castelle/core/widgets/app_video_player.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
@@ -124,6 +124,21 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
   void _loadExistingProfile() {
     final profileProvider = context.read<ActorProfileProvider>();
     final profile = profileProvider.profile;
+    if (profileProvider.loadFailed) {
+      // Profil sunucudan okunamadı: alanlar boş görünür ama bu "silindi"
+      // demek değil; kullanıcı uyarılır, kayıt provider tarafından engellenir.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(profileProvider.errorMessage ??
+                'Profiliniz yüklenemedi. İnternet bağlantınızı kontrol edip tekrar açın.'),
+            backgroundColor: AppTheme.error,
+            duration: const Duration(seconds: 6),
+          ),
+        );
+      });
+    }
     final authProvider = context.read<AuthProvider>();
     final user = authProvider.user;
 
@@ -568,10 +583,9 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
 
       if (!proceed) return;
 
-      final String? videoPath;
+      XFile? videoXFile;
       if (source == ImageSource.camera) {
-        if (!mounted) return;
-        videoPath = await Navigator.push<String>(
+        final recordedPath = await Navigator.push<String>(
           context,
           MaterialPageRoute(
             builder: (_) => VideoRecordScreen(
@@ -580,8 +594,11 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
             ),
           ),
         );
+        if (recordedPath != null && recordedPath.isNotEmpty) {
+          videoXFile = XFile(recordedPath);
+        }
       } else {
-        final xFile = await _picker.pickVideo(
+        videoXFile = await _picker.pickVideo(
           source: source,
           maxDuration: videoKey == 'expressionVideo'
               ? const Duration(seconds: 50)
@@ -593,18 +610,17 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
                           ? const Duration(seconds: 30)
                           : const Duration(seconds: 20)))),
         );
-        videoPath = xFile?.path;
       }
 
-      if (videoPath == null || videoPath.isEmpty) {
+      if (videoXFile == null) {
         debugPrint('📹 [EditProfile] Video seçimi iptal edildi.');
         return;
       }
-      debugPrint('📹 [EditProfile] Video seçildi: $videoPath');
+      debugPrint('📹 [EditProfile] Video seçildi: ${videoXFile.path}');
       if (!mounted) return;
 
       // Video yataylık kontrolü
-      final controller = localVideoController(videoPath);
+      final controller = MediaUpload.videoController(videoXFile.path);
       await controller.initialize();
       final size = controller.value.size;
       final isLandscape = size.width > size.height;
@@ -636,7 +652,7 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
       final authProvider = context.read<AuthProvider>();
       final uid = authProvider.user?.uid;
       final provider = context.read<ActorProfileProvider>();
-      final success = await provider.uploadAndCompressProfileVideo(XFile(videoPath), videoKey, fallbackUid: uid);
+      final success = await provider.uploadAndCompressProfileVideo(videoXFile, videoKey, fallbackUid: uid);
 
       if (!mounted) return;
       setState(() => _processingVideoKey = null);
@@ -1353,9 +1369,7 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
             ),
             child: ClipOval(
               child: profile?.profilePhotoUrl != null
-                  ? (profile!.profilePhotoUrl!.startsWith('http')
-                      ? Image.network(profile.profilePhotoUrl!, fit: BoxFit.cover)
-                      : localImage(profile.profilePhotoUrl!, fit: BoxFit.cover))
+                  ? MediaUpload.image(profile!.profilePhotoUrl!, fit: BoxFit.cover)
                   : Container(
                       color: AppTheme.surfaceLight,
                       child: const Icon(Icons.person, size: 48, color: AppTheme.textTertiary),
@@ -1476,9 +1490,7 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
                 children: [
                   ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-                    child: url.startsWith('http')
-                        ? Image.network(url, fit: BoxFit.cover)
-                        : localImage(url, fit: BoxFit.cover),
+                    child: MediaUpload.image(url, fit: BoxFit.cover),
                   ),
                   Positioned(
                     top: 2,
@@ -1736,9 +1748,17 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
           if (isProcessingThis)
             _buildVideoProcessingProgress(provider)
           else if (hasVideo)
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Yüklenen videonun profil içindeki önizlemesi
+                AppVideoPlayer(
+                  key: ValueKey(videoUrl),
+                  videoUrl: videoUrl,
+                  title: title,
+                  maxHeight: 380,
+                ),
+                const SizedBox(height: 10),
                 Row(
                   children: [
                     const Icon(Icons.check_circle, color: AppTheme.success, size: 16),
@@ -1746,7 +1766,10 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
                     Text('Video Yüklendi', style: GoogleFonts.inter(fontSize: 12.5, color: AppTheme.textSecondary)),
                   ],
                 ),
-                Row(
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
                   children: [
                     ElevatedButton.icon(
                       onPressed: () => _downloadVideoFile(context, videoUrl, title),
@@ -1759,7 +1782,6 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       ),
                     ),
-                    const SizedBox(width: 8),
                     ElevatedButton.icon(
                       onPressed: () => _pickProfileVideo(ImageSource.gallery, videoKey),
                       icon: const Icon(Icons.refresh, size: 14),
@@ -1771,7 +1793,6 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       ),
                     ),
-                    const SizedBox(width: 8),
                     ElevatedButton.icon(
                       onPressed: () async {
                         final confirmed = await showDialog<bool>(
@@ -2079,14 +2100,12 @@ class _ActorProfileEditScreenState extends State<ActorProfileEditScreen> {
 
     final scaffoldMessenger = ScaffoldMessenger.of(context);
 
-    // Web'de klasör seçimi ve dart:io dosya yazma desteklenmiyor
+    // Web: klasöre kaydetme desteklenmez, videoyu yeni sekmede aç.
     if (kIsWeb) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Klasöre indirme web sürümünde desteklenmiyor. Lütfen mobil uygulamayı kullanın.'),
-            backgroundColor: AppTheme.warning,
-          ),
+      final opened = await MediaUpload.openInBrowser(url);
+      if (!opened) {
+        scaffoldMessenger.showSnackBar(
+          const SnackBar(content: Text('Video açılamadı.'), backgroundColor: AppTheme.error),
         );
       }
       return;

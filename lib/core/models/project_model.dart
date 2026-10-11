@@ -34,6 +34,8 @@ class ProjectRole {
   final String? gender;         // 'male', 'female', 'other', null(farketmez)
   final int? heightMin;
   final int? heightMax;
+  final int? weightMin;         // Aranan min kilo (kg)
+  final int? weightMax;         // Aranan max kilo (kg)
   final String? city;           // Aranan Şehir (Örn: İstanbul)
   final List<String> requiredSkills;
   final List<String> requiredLanguages; // Aranan Diller (Örn: İngilizce)
@@ -53,6 +55,8 @@ class ProjectRole {
     this.gender,
     this.heightMin,
     this.heightMax,
+    this.weightMin,
+    this.weightMax,
     this.city,
     this.requiredSkills = const [],
     this.requiredLanguages = const [],
@@ -74,6 +78,8 @@ class ProjectRole {
       gender: map['gender'],
       heightMin: map['heightMin'] != null ? int.tryParse(map['heightMin'].toString()) : null,
       heightMax: map['heightMax'] != null ? int.tryParse(map['heightMax'].toString()) : null,
+      weightMin: map['weightMin'] != null ? int.tryParse(map['weightMin'].toString()) : null,
+      weightMax: map['weightMax'] != null ? int.tryParse(map['weightMax'].toString()) : null,
       city: map['city'],
       requiredSkills: (map['requiredSkills'] as List<dynamic>?)
               ?.map((e) => e.toString())
@@ -105,6 +111,8 @@ class ProjectRole {
       'gender': gender,
       'heightMin': heightMin,
       'heightMax': heightMax,
+      'weightMin': weightMin,
+      'weightMax': weightMax,
       'city': city,
       'requiredSkills': requiredSkills,
       'requiredLanguages': requiredLanguages,
@@ -114,6 +122,33 @@ class ProjectRole {
       'budget': budget,
       'backgroundAudioUrl': backgroundAudioUrl,
     };
+  }
+
+  /// Kriterlerin kısa özeti (ör. "25-35 yaş · Kadın · 55-65 kg")
+  String get criteriaSummary {
+    final parts = <String>[];
+    if (ageMin != null || ageMax != null) {
+      parts.add(ageMin != null && ageMax != null
+          ? '$ageMin-$ageMax yaş'
+          : ageMin != null
+              ? '$ageMin+ yaş'
+              : '≤$ageMax yaş');
+    }
+    if (gender != null && gender!.isNotEmpty) {
+      parts.add(gender == 'male'
+          ? 'Erkek'
+          : gender == 'female'
+              ? 'Kadın'
+              : 'Diğer');
+    }
+    if (heightMin != null || heightMax != null) {
+      parts.add('${heightMin ?? '?'}-${heightMax ?? '?'} cm');
+    }
+    if (weightMin != null || weightMax != null) {
+      parts.add('${weightMin ?? '?'}-${weightMax ?? '?'} kg');
+    }
+    if (city != null && city!.trim().isNotEmpty) parts.add(city!.trim());
+    return parts.join(' · ');
   }
 }
 
@@ -255,6 +290,35 @@ class ProjectModel {
           .toSet()
           .toList(),
     };
+  }
+
+  /// Projede görüntülenecek bütçe metni. Proje bütçesi girilmemişse
+  /// rollere girilen bütçelerden hesaplanır.
+  /// 20000 → "20.000 ₺" (binlik ayraçlı, kuruşsuz)
+  static String formatTl(double value) {
+    final digits = value.round().toString();
+    final buf = StringBuffer();
+    for (var i = 0; i < digits.length; i++) {
+      final fromEnd = digits.length - i;
+      buf.write(digits[i]);
+      if (fromEnd > 1 && fromEnd % 3 == 1 && digits[i] != '-') buf.write('.');
+    }
+    return '${buf.toString()} ₺';
+  }
+
+  String? get budgetLabel {
+    if (budget != null && budget! > 0) return formatTl(budget!);
+    final roleBudgets = roles
+        .map((r) => r.budget)
+        .whereType<double>()
+        .where((b) => b > 0)
+        .toList();
+    if (roleBudgets.isEmpty) return null;
+    roleBudgets.sort();
+    if (roleBudgets.first == roleBudgets.last) {
+      return formatTl(roleBudgets.first);
+    }
+    return '${formatTl(roleBudgets.first).replaceAll(' ₺', '')} - ${formatTl(roleBudgets.last)}';
   }
 
   /// Toplam kota

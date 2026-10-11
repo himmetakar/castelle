@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:castelle/core/services/media_upload.dart';
-import 'package:castelle/core/widgets/web_frame.dart';
+import 'package:castelle/core/utils/media_upload.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:video_player/video_player.dart';
-import 'package:chewie/chewie.dart';
 import 'package:castelle/core/theme/app_theme.dart';
+import 'package:castelle/core/widgets/app_video_player.dart';
 import 'package:castelle/core/models/project_model.dart';
 import 'package:castelle/core/models/actor_profile_model.dart';
 import 'package:castelle/core/providers/auth_provider.dart';
@@ -32,7 +30,9 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   List<ActorProfileModel> _allActors = [];
   final Map<String, Set<String>> _roleSelectedCandidateIds = {};
   final Set<String> _requestedCandidateRoleKeys = {};
-  int _expandedRoleIndex = 0;
+  // Tüm karakterler varsayılan olarak açık gelir (her karakterin önerileri
+  // ayrı ayrı görünür). Kullanıcı istediğini kapatabilir.
+  final Set<int> _collapsedRoles = {};
   bool _loadingCandidates = false;
 
   // Bütçe esnekliği toggle — Map<roleName, Set<actorUid>>
@@ -54,15 +54,24 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
 
     List<ActorProfileModel> actors = [];
     try {
-      // Tüm oyuncuları çek
+      // Yalnızca admin tarafından ONAYLANMIŞ oyuncular aranır. "Onay
+      // bekleyen" / reddedilen profiller veri tabanı sorgusunda elenir.
       final snapshot = await FirebaseFirestore.instance
           .collection('users')
           .where('role', isEqualTo: 'actor')
+          .where('approvalStatus', isEqualTo: 'approved')
           .get();
 
-      actors = snapshot.docs
-          .map((doc) => ActorProfileModel.fromMap(doc.data(), doc.id))
-          .toList();
+      // Tek bir bozuk kayıt (ör. hatalı tipte alan) tüm listeyi
+      // düşürmesin — her doküman ayrı ayrı çevrilir.
+      for (final doc in snapshot.docs) {
+        try {
+          final actor = ActorProfileModel.fromMap(doc.data(), doc.id);
+          if (actor.isApproved) actors.add(actor);
+        } catch (e) {
+          debugPrint('⚠️ [ProjectDetailScreen] Oyuncu atlandı (${doc.id}): $e');
+        }
+      }
     } catch (e) {
       debugPrint('⚠️ [ProjectDetailScreen] Actor load error: $e');
     }
@@ -95,11 +104,9 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       _loadingCandidates = false;
       // Her rol için tüm adayların toggle'ını başlat (varsayılan: AÇIK)
       for (final role in _project.roles) {
-        final roleCandidates = actors
-            .where((a) => _isActorSuitableForRole(a, role))
-            .map((a) => a.uid)
-            .toSet();
-        _budgetFlexEnabled[role.roleName] ??= Set.from(roleCandidates);
+        // Varsayılan: tüm adaylar için bütçe esnekliği AÇIK (yakın
+        // eşleşme önerileri dahil)
+        _budgetFlexEnabled[role.roleName] ??= actors.map((a) => a.uid).toSet();
       }
     });
   }
@@ -130,7 +137,10 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     final hasAge = role.ageMin != null || role.ageMax != null;
     final hasHeight = role.heightMin != null || role.heightMax != null;
     final hasCity = role.city != null && role.city!.trim().isNotEmpty;
-    final hasAppearance = role.appearance != null && role.appearance!.trim().isNotEmpty;
+    // Not: "Görünüm" (Esmer, Sarışın…) serbest metin olduğundan profildeki
+    // saç rengiyle birebir eşleşmiyordu ve kriterlere uyan oyuncuları
+    // (ör. 35 yaş / 185 cm) listeden düşürüyordu. Artık zorunlu filtre
+    // değil; yalnızca uyumluluk yüzdesini etkiler.
 
     // 1. Cinsiyet kontrolü
     if (hasGender) {
@@ -154,19 +164,16 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       if (role.heightMax != null && actor.heightCm! > role.heightMax!) return false;
     }
 
+    // 3b. Kilo aralığı kontrolü
+    if (role.weightMin != null || role.weightMax != null) {
+      if (actor.weightKg == null) return false;
+      if (role.weightMin != null && actor.weightKg! < role.weightMin!) return false;
+      if (role.weightMax != null && actor.weightKg! > role.weightMax!) return false;
+    }
+
     // 4. Şehir kontrolü
     if (hasCity) {
       if (actor.city == null || !_normalizeText(actor.city!).contains(_normalizeText(role.city!))) {
-        return false;
-      }
-    }
-
-    // 5. Görünüm / Saç rengi kontrolü
-    if (hasAppearance) {
-      final appNorm = _normalizeText(role.appearance!);
-      final hairNorm = actor.hairColor != null ? _normalizeText(actor.hairColor!.displayName) : '';
-      final bioNorm = actor.bio != null ? _normalizeText(actor.bio!) : '';
-      if (!hairNorm.contains(appNorm) && !bioNorm.contains(appNorm)) {
         return false;
       }
     }
@@ -311,6 +318,13 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
           'createdAt': FieldValue.serverTimestamp(),
         });
       }
+
+      // Gizli projelerde yalnızca davet edilen oyuncular projeyi açabilir
+      // (bkz. firestore.rules → projects). Davet edilenler projeye işlenir.
+      batch.update(
+        FirebaseFirestore.instance.collection('projects').doc(_project.id),
+        {'invitedActorIds': FieldValue.arrayUnion(selectedIds.toList())},
+      );
 
       await batch.commit();
 
@@ -556,7 +570,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                     _buildSection(
                       'Örnek/Tanıtım Videosu',
                       Icons.video_collection_outlined,
-                      child: _ProjectSampleVideoPlayer(videoUrl: _project.sampleVideoUrl!),
+                      child: AppVideoPlayer(videoUrl: _project.sampleVideoUrl!, title: 'Örnek Video'),
                     ).animate().fadeIn(delay: 440.ms),
                     const SizedBox(height: 24),
                   ],
@@ -576,7 +590,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                   if (isAdmin) ...[
                     const SizedBox(height: 24),
                     _buildSection(
-                      'Uygun Oyuncu Adayları',
+                      'Oyuncu İsteme · ${_project.roles.length} Karakter',
                       Icons.people_outline,
                       child: _buildSuitableCandidatesSection(context),
                     ).animate().fadeIn(delay: 500.ms),
@@ -640,6 +654,21 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
           matchScore += 1.0;
         } else if ((role.heightMin != null && (actor.heightCm! - role.heightMin!).abs() <= 3) ||
                    (role.heightMax != null && (actor.heightCm! - role.heightMax!).abs() <= 3)) {
+          matchScore += 0.75;
+        }
+      }
+    }
+
+    // 4b. Kilo Aralığı Uyum Testi
+    if (role.weightMin != null || role.weightMax != null) {
+      criteriaCount++;
+      if (actor.weightKg != null) {
+        final minOk = role.weightMin == null || actor.weightKg! >= role.weightMin!;
+        final maxOk = role.weightMax == null || actor.weightKg! <= role.weightMax!;
+        if (minOk && maxOk) {
+          matchScore += 1.0;
+        } else if ((role.weightMin != null && (actor.weightKg! - role.weightMin!).abs() <= 3) ||
+                   (role.weightMax != null && (actor.weightKg! - role.weightMax!).abs() <= 3)) {
           matchScore += 0.75;
         }
       }
@@ -751,6 +780,22 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       }
     }
 
+    // 4b. Kilo
+    if (role.weightMin != null || role.weightMax != null) {
+      final rangeText = '${role.weightMin ?? 0}–${role.weightMax ?? "∞"} kg';
+      if (actor.weightKg != null) {
+        final minOk = role.weightMin == null || actor.weightKg! >= role.weightMin!;
+        final maxOk = role.weightMax == null || actor.weightKg! <= role.weightMax!;
+        if (minOk && maxOk) {
+          matched.add('Kilo (${actor.weightKg} kg)');
+        } else {
+          missing.add('Kilo (Oyuncu: ${actor.weightKg} kg, Aranan: $rangeText)');
+        }
+      } else {
+        missing.add('Kilo ($rangeText)');
+      }
+    }
+
     // 5. Yetenekler
     for (final skill in role.requiredSkills) {
       final actorSkills = actor.skills.map((s) => _normalizeText(s)).toSet();
@@ -819,6 +864,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                   Expanded(
                     child: Text(
                       actor.fullName,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 18, color: AppTheme.textPrimary),
                     ),
                   ),
@@ -928,14 +975,31 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
 
   Widget _buildRoleAccordion(ProjectRole role, int index) {
     // Uygun adayları bul ve uyumluluk yüzdesine göre azalan sırala (%96 -> %91 -> %83)
-    final roleCandidates = _allActors
+    final strictCandidates = _allActors
         .where((actor) => _isActorSuitableForRole(actor, role))
         .toList();
 
+    // Kriterlere birebir uyan aday yoksa bu karakter için de öneri
+    // yapılabilsin diye en yakın eşleşmeler (cinsiyeti açıkça uyuşmayanlar
+    // hariç) uyumluluk yüzdesine göre gösterilir.
+    final isNearMatchList = strictCandidates.isEmpty;
+    final roleCandidates = isNearMatchList
+        ? _allActors.where((actor) {
+            if (role.gender != null && role.gender!.isNotEmpty &&
+                actor.gender != null && actor.gender!.value != role.gender) {
+              return false;
+            }
+            return true;
+          }).toList()
+        : strictCandidates;
+
     roleCandidates.sort((a, b) =>
         _calculateCompatibilityPercentage(b, role).compareTo(_calculateCompatibilityPercentage(a, role)));
+    if (isNearMatchList && roleCandidates.length > 15) {
+      roleCandidates.removeRange(15, roleCandidates.length);
+    }
 
-    final isOpen = _expandedRoleIndex == index;
+    final isOpen = !_collapsedRoles.contains(index);
 
     // Get selected count for this role
     final selectedIds = _roleSelectedCandidateIds[role.roleName] ?? {};
@@ -1004,7 +1068,11 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
           InkWell(
             onTap: () {
               setState(() {
-                _expandedRoleIndex = isOpen ? -1 : index;
+                if (isOpen) {
+                  _collapsedRoles.add(index);
+                } else {
+                  _collapsedRoles.remove(index);
+                }
               });
             },
             borderRadius: BorderRadius.circular(AppTheme.radiusMd),
@@ -1038,11 +1106,21 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                           ),
                         ),
                         const SizedBox(height: 2),
+                        if (role.criteriaSummary.isNotEmpty)
+                          Text(
+                            role.criteriaSummary,
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
                         Text(
-                          '${roleCandidates.length} Uygun Aday',
+                          isNearMatchList
+                              ? 'Birebir uyan aday yok · ${roleCandidates.length} yakın öneri'
+                              : '${roleCandidates.length} Uygun Aday',
                           style: GoogleFonts.inter(
                             fontSize: 11,
-                            color: AppTheme.textTertiary,
+                            color: isNearMatchList ? AppTheme.warning : AppTheme.textTertiary,
                           ),
                         ),
                       ],
@@ -1070,7 +1148,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                       child: Padding(
                         padding: const EdgeInsets.symmetric(vertical: 20),
                         child: Text(
-                          'Bu rolün kriterlerine uygun aday bulunamadı.',
+                          'Bu karakter için önerilebilecek oyuncu bulunamadı.',
                           style: GoogleFonts.inter(
                             fontSize: 12.5,
                             color: AppTheme.textTertiary,
@@ -1079,7 +1157,23 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                       ),
                     )
                   else ...[
-                                        // Select all & Audition request action row (Responsive Layout)
+                    if (isNearMatchList)
+                      Container(
+                        width: double.infinity,
+                        margin: const EdgeInsets.only(bottom: 10),
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppTheme.warning.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                          border: Border.all(color: AppTheme.warning.withValues(alpha: 0.3)),
+                        ),
+                        child: Text(
+                          'Bu karakterin tüm kriterlerine birebir uyan oyuncu yok. '
+                          'Aşağıda uyumluluk yüzdesine göre en yakın öneriler listelenmiştir.',
+                          style: GoogleFonts.inter(fontSize: 11.5, color: AppTheme.textSecondary),
+                        ),
+                      ),
+                    // Select all & Audition request action row (Responsive Layout)
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -1218,29 +1312,41 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    // İsim + Bütçe Toggle
-                                    Row(
+                                    // İsim — kendi tam genişlikli satırında.
+                                    // Eskiden rozet + bütçe toggle ile aynı
+                                    // satırı paylaşıyordu; bazı ekran/kart
+                                    // genişliklerinde bu satır o kadar
+                                    // daralıyordu ki isim harf harf alt alta
+                                    // dizilmeye başlıyordu. Artık isim asla
+                                    // başka bir öğeyle yer paylaşmıyor.
+                                    Text(
+                                      actor.fullName,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                        color: isRequested
+                                            ? AppTheme.textTertiary
+                                            : AppTheme.textPrimary,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    // Rozet + Bütçe Toggle — isimden bağımsız,
+                                    // kendi satırında; sığmazsa Wrap ile alta
+                                    // geçer.
+                                    Wrap(
+                                      crossAxisAlignment: WrapCrossAlignment.center,
+                                      spacing: 6,
+                                      runSpacing: 4,
                                       children: [
-                                        Expanded(
-                                          child: Text(
-                                            actor.fullName,
-                                            style: GoogleFonts.outfit(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w600,
-                                              color: isRequested
-                                                  ? AppTheme.textTertiary
-                                                  : AppTheme.textPrimary,
-                                            ),
-                                          ),
-                                        ),
-                                        if (isRequested) ...[
-                                          const SizedBox(width: 8),
+                                        if (isRequested)
                                           Container(
                                             padding: const EdgeInsets.symmetric(
                                                 horizontal: 8, vertical: 3),
                                             decoration: BoxDecoration(
                                               color: AppTheme.primary
-                                                  .withValues(alpha: 0.1),
+                                                  .withOpacity(0.1),
                                               borderRadius: BorderRadius.circular(
                                                   AppTheme.radiusSm),
                                             ),
@@ -1252,13 +1358,10 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                                                 color: AppTheme.primary,
                                               ),
                                             ),
-                                          ),
-                                        ] else ...[
+                                          )
+                                        else ...[
                                           // Yetenek eşleşme rozeti
-                                          ...[
-                                          const SizedBox(width: 6),
                                           matchBadge(actor),
-                                        ],
                                           // Bütçe Esnekliği Toggle
                                           _buildActorBudgetToggle(role, actor.uid),
                                         ],
@@ -1267,6 +1370,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                                     const SizedBox(height: 2),
                                     Text(
                                       '${actor.age ?? "?"} Yaş · '
+                                      '${actor.heightCm != null ? "${actor.heightCm} cm · " : ""}'
                                       '${actor.gender == Gender.male ? "Erkek" : actor.gender == Gender.female ? "Kadın" : "Diğer"} · '
                                       '${actor.city ?? "Şehir Belirtilmemiş"}',
                                       style: GoogleFonts.inter(
@@ -1633,7 +1737,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
           ),
         );
       } else {
-        imageWidget = localImage(
+        imageWidget = MediaUpload.image(
           _project.primaryImageUrl!,
           fit: BoxFit.contain,
           errorBuilder: (_, _, _) => Image.asset(
@@ -1849,6 +1953,16 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                           ? 'Kadın'
                           : 'Diğer',
                 ),
+              if (role.heightMin != null || role.heightMax != null)
+                _buildRequirementChip(
+                  Icons.height,
+                  '${role.heightMin ?? '?'}-${role.heightMax ?? '?'} cm',
+                ),
+              if (role.weightMin != null || role.weightMax != null)
+                _buildRequirementChip(
+                  Icons.monitor_weight_outlined,
+                  '${role.weightMin ?? '?'}-${role.weightMax ?? '?'} kg',
+                ),
               if (role.budget != null)
                 _buildRequirementChip(
                   Icons.monetization_on_outlined,
@@ -2025,6 +2139,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
               width: 260,
               margin: const EdgeInsets.only(right: 14),
               decoration: BoxDecoration(
+                color: Colors.white,
                 borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                 border: Border.all(color: AppTheme.border, width: 0.5),
                 boxShadow: [
@@ -2039,7 +2154,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 borderRadius: BorderRadius.circular(AppTheme.radiusMd - 1),
                 child: Image.network(
                   url,
-                  fit: BoxFit.cover,
+                  // Logo gibi yatay görseller kırpılmasın
+                  fit: BoxFit.contain,
                   loadingBuilder: (context, child, loadingProgress) {
                     if (loadingProgress == null) return child;
                     return const Center(
@@ -2061,121 +2177,3 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   }
 }
 
-class _ProjectSampleVideoPlayer extends StatefulWidget {
-  final String videoUrl;
-
-  const _ProjectSampleVideoPlayer({required this.videoUrl});
-
-  @override
-  State<_ProjectSampleVideoPlayer> createState() => _ProjectSampleVideoPlayerState();
-}
-
-class _ProjectSampleVideoPlayerState extends State<_ProjectSampleVideoPlayer> {
-  VideoPlayerController? _videoPlayerController;
-  ChewieController? _chewieController;
-  bool _isInit = false;
-  bool _isLoading = false;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _initPlayer();
-  }
-
-  @override
-  void dispose() {
-    _chewieController?.dispose();
-    _videoPlayerController?.dispose();
-    super.dispose();
-  }
-
-  Future<void> _initPlayer() async {
-    if (!mounted) return;
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
-
-    try {
-      _videoPlayerController = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
-      await _videoPlayerController!.initialize();
-
-      _chewieController = ChewieController(
-        videoPlayerController: _videoPlayerController!,
-        aspectRatio: _videoPlayerController!.value.aspectRatio,
-        autoPlay: false,
-        looping: false,
-        allowFullScreen: true,
-        materialProgressColors: ChewieProgressColors(
-          playedColor: AppTheme.accent,
-          handleColor: AppTheme.accent,
-          backgroundColor: AppTheme.surfaceElevated,
-          bufferedColor: AppTheme.primary.withValues(alpha: 0.3),
-        ),
-      );
-
-      if (mounted) {
-        setState(() {
-          _isInit = true;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _error = 'Video yüklenirken hata oluştu: $e';
-        });
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) =>
-      MaxWidthBox(maxWidth: 640, child: _buildPlayer(context));
-
-  Widget _buildPlayer(BuildContext context) {
-    if (_isLoading) {
-      return Container(
-        height: 200,
-        decoration: BoxDecoration(
-          color: AppTheme.surfaceLight,
-          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        ),
-        child: const Center(
-          child: CircularProgressIndicator(color: AppTheme.accent),
-        ),
-      );
-    }
-
-    if (_error != null) {
-      return Container(
-        height: 200,
-        decoration: BoxDecoration(
-          color: AppTheme.surfaceLight,
-          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        ),
-        child: Center(
-          child: Text(_error!, style: GoogleFonts.inter(color: AppTheme.error, fontSize: 13)),
-        ),
-      );
-    }
-
-    if (_isInit && _chewieController != null) {
-      return Container(
-        height: 200,
-        decoration: BoxDecoration(
-          color: Colors.black,
-          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-          child: Chewie(controller: _chewieController!),
-        ),
-      );
-    }
-
-    return const SizedBox.shrink();
-  }
-}

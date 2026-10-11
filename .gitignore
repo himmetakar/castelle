@@ -49,3 +49,7 @@ key.properties
 *.jks
 *.keystore
 upload_certificate.pem
+
+# Release ciktilari ve yerel yedekler
+/release/
+/_merge_backup_*/

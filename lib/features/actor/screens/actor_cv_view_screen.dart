@@ -1,16 +1,10 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:castelle/core/services/media_upload.dart';
-import 'package:castelle/core/widgets/web_frame.dart';
-import 'package:castelle/core/utils/video_utils.dart';
-import 'package:castelle/core/utils/platform_utils.dart';
+import 'package:castelle/core/utils/media_upload.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:video_player/video_player.dart';
-import 'package:chewie/chewie.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:dio/dio.dart';
@@ -20,12 +14,17 @@ import 'package:castelle/core/services/actor_profile_service.dart';
 import 'package:castelle/core/services/private_profile_fields.dart';
 import 'package:castelle/core/widgets/policy_dialogs.dart';
 import 'package:castelle/core/theme/app_theme.dart';
+import 'package:castelle/core/widgets/approval_status_badge.dart';
 import 'package:castelle/core/models/actor_profile_model.dart';
 import 'package:castelle/core/providers/auth_provider.dart';
 import 'package:castelle/features/actor/providers/actor_profile_provider.dart';
 import 'package:castelle/features/actor/screens/actor_profile_edit_screen.dart';
 import 'package:castelle/features/chat/screens/chat_room_screen.dart';
 import 'package:castelle/core/widgets/video_record_screen.dart';
+import 'package:castelle/core/widgets/app_video_player.dart';
+import 'package:castelle/features/admin/screens/actor_history_screen.dart';
+import 'package:castelle/core/widgets/web_frame.dart';
+import 'package:castelle/core/utils/platform_utils.dart';
 
 
 /// Castelle - Oyuncu CV / Cast Profil Görüntüleme Ekranı
@@ -264,7 +263,6 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
       final xFile = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
       if (xFile == null) return;
       await provider.uploadProfilePhoto(xFile);
-      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Profil resmi güncellendi.'), backgroundColor: AppTheme.success),
       );
@@ -379,10 +377,9 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
 
       if (selectedSource == null) return;
 
-      final String? videoPath;
+      XFile? videoXFile;
       if (selectedSource == ImageSource.camera) {
-        if (!mounted) return;
-        videoPath = await Navigator.push<String>(
+        final recordedPath = await Navigator.push<String>(
           context,
           MaterialPageRoute(
             builder: (_) => VideoRecordScreen(
@@ -391,8 +388,11 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
             ),
           ),
         );
+        if (recordedPath != null && recordedPath.isNotEmpty) {
+          videoXFile = XFile(recordedPath);
+        }
       } else {
-        final xFile = await _picker.pickVideo(
+        videoXFile = await _picker.pickVideo(
           source: ImageSource.gallery,
           maxDuration: videoKey == 'expressionVideo'
               ? const Duration(seconds: 50)
@@ -404,13 +404,12 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
                           ? const Duration(seconds: 30)
                           : const Duration(seconds: 20)))),
         );
-        videoPath = xFile?.path;
       }
 
-      if (videoPath == null || videoPath.isEmpty) return;
+      if (videoXFile == null) return;
 
       // Video yataylık kontrolü
-      final controller = localVideoController(videoPath);
+      final controller = MediaUpload.videoController(videoXFile.path);
       await controller.initialize();
       final size = controller.value.size;
       final isLandscape = size.width > size.height;
@@ -437,7 +436,7 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
       }
 
       setState(() => _processingVideoKey = videoKey);
-      final success = await provider.uploadAndCompressProfileVideo(XFile(videoPath), videoKey);
+      final success = await provider.uploadAndCompressProfileVideo(videoXFile, videoKey);
       setState(() => _processingVideoKey = null);
       if (success) {
         if (!mounted) return;
@@ -608,6 +607,21 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
             ),
           ]
           else if (authProvider.isAdmin || authProvider.isModerator) ...[
+            IconButton(
+              icon: const Icon(Icons.history, color: AppTheme.accent),
+              tooltip: 'Oyuncu Geçmişi (Projeler ve Oyunlar)',
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ActorHistoryScreen(
+                      actorId: profile.uid,
+                      actorName: profile.fullName,
+                    ),
+                  ),
+                );
+              },
+            ),
             if (profile.approvalStatus == 'rejected')
               IconButton(
                 icon: const Icon(Icons.check_circle_outline, color: AppTheme.success),
@@ -765,9 +779,7 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
                   ),
                   child: ClipOval(
                     child: profile.profilePhotoUrl != null
-                        ? (profile.profilePhotoUrl!.startsWith('http')
-                            ? Image.network(profile.profilePhotoUrl!, fit: BoxFit.cover)
-                            : localImage(profile.profilePhotoUrl!, fit: BoxFit.cover))
+                        ? MediaUpload.image(profile.profilePhotoUrl!, fit: BoxFit.cover)
                         : Container(
                             color: AppTheme.surfaceLight,
                             child: Center(
@@ -939,9 +951,7 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
                   ),
                   child: ClipOval(
                     child: profile.profilePhotoUrl != null
-                        ? (profile.profilePhotoUrl!.startsWith('http')
-                            ? Image.network(profile.profilePhotoUrl!, fit: BoxFit.cover)
-                            : localImage(profile.profilePhotoUrl!, fit: BoxFit.cover))
+                        ? MediaUpload.image(profile.profilePhotoUrl!, fit: BoxFit.cover)
                         : Container(
                             color: AppTheme.surfaceLight,
                             child: Center(
@@ -1009,6 +1019,18 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
               ),
             ],
           ),
+
+          // Yetkili görünümünde profilin veri tabanındaki onay durumu —
+          // daha önce onaylanmış profil tekrar açıldığında net görünür.
+          if (!widget.isOwner &&
+              (context.read<AuthProvider>().isAdmin ||
+                  context.read<AuthProvider>().isModerator)) ...[
+            const SizedBox(height: 8),
+            ApprovalStatusBadge(
+              status: profile.approvalStatus,
+              approvedAt: profile.approvedAt,
+            ),
+          ],
 
           if (profile.isHidden && widget.isOwner) ...[
             const SizedBox(height: 10),
@@ -1143,9 +1165,7 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
                       Positioned.fill(
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(8),
-                          child: url.startsWith('http')
-                              ? Image.network(url, fit: BoxFit.cover)
-                              : localImage(url, fit: BoxFit.cover),
+                          child: MediaUpload.image(url, fit: BoxFit.cover),
                         ),
                       ),
                       Positioned(
@@ -1350,20 +1370,13 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
   Widget _buildGalleryImage(String url, double width, double height) {
     return GestureDetector(
       onTap: () => _showImageOverlay(url),
-      child: url.startsWith('http')
-          ? Image.network(
-              url,
-              width: width,
-              height: height,
-              fit: BoxFit.cover,
-              errorBuilder: (_, _, _) => Container(color: AppTheme.surfaceLight, child: const Icon(Icons.broken_image)),
-            )
-          : localImage(
-              url,
-              width: width,
-              height: height,
-              fit: BoxFit.cover,
-            ),
+      child: MediaUpload.image(
+        url,
+        width: width,
+        height: height,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => Container(color: AppTheme.surfaceLight, child: const Icon(Icons.broken_image)),
+      ),
     );
   }
 
@@ -1385,9 +1398,7 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
               ),
             ),
             InteractiveViewer(
-              child: url.startsWith('http')
-                  ? Image.network(url)
-                  : localImage(url),
+              child: MediaUpload.image(url),
             ),
             Positioned(
               top: 40,
@@ -2360,7 +2371,14 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
   }
 
   Widget _buildVideoPlayerWidget(String videoUrl, String title) {
-    return _ProfileInlineVideoPlayer(videoUrl: videoUrl, title: title);
+    // Ortak oynatıcı: URL değişince yeniden kurulur, dokunulunca yüklenir
+    // (bir sayfada 4 video aynı anda başlatılıp çözücüyü tıkamaz).
+    return AppVideoPlayer(
+      key: ValueKey(videoUrl),
+      videoUrl: videoUrl,
+      title: title,
+      maxHeight: 420,
+    );
   }
 
   Widget _buildSmallIconButton({
@@ -3105,14 +3123,12 @@ class _ActorCvViewScreenState extends State<ActorCvViewScreen> {
 
     final scaffoldMessenger = ScaffoldMessenger.of(context);
 
-    // Web'de klasör seçimi ve dart:io dosya yazma desteklenmiyor
+    // Web: klasöre kaydetme desteklenmez, videoyu yeni sekmede aç.
     if (kIsWeb) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Klasöre indirme web sürümünde desteklenmiyor. Lütfen mobil uygulamayı kullanın.'),
-            backgroundColor: AppTheme.warning,
-          ),
+      final opened = await MediaUpload.openInBrowser(url);
+      if (!opened) {
+        scaffoldMessenger.showSnackBar(
+          const SnackBar(content: Text('Video açılamadı.'), backgroundColor: AppTheme.error),
         );
       }
       return;
@@ -3560,199 +3576,4 @@ class _PhysicalLabel {
   final String title;
   final String value;
   _PhysicalLabel(this.title, this.value);
-}
-
-/// Profil içi inline video oynatıcı (Chewie ile)
-class _ProfileInlineVideoPlayer extends StatefulWidget {
-  final String videoUrl;
-  final String title;
-
-  const _ProfileInlineVideoPlayer({
-    required this.videoUrl,
-    required this.title,
-  });
-
-  @override
-  State<_ProfileInlineVideoPlayer> createState() => _ProfileInlineVideoPlayerState();
-}
-
-class _ProfileInlineVideoPlayerState extends State<_ProfileInlineVideoPlayer> {
-  VideoPlayerController? _videoPlayerController;
-  ChewieController? _chewieController;
-  bool _isInit = false;
-  bool _isLoading = false;
-  String? _error;
-  bool _isPlaying = false;
-
-  @override
-  void initState() {
-    super.initState();
-    // Sayfa açıldığında ön izleme için videoyu otomatik yükle (oynatmadan)
-    _initPlayer(autoPlay: false);
-  }
-
-  @override
-  void dispose() {
-    _videoPlayerController?.removeListener(_videoListener);
-    _chewieController?.dispose();
-    _videoPlayerController?.dispose();
-    super.dispose();
-  }
-
-  void _videoListener() {
-    if (_videoPlayerController == null) return;
-    final isPlaying = _videoPlayerController!.value.isPlaying;
-    if (isPlaying != _isPlaying) {
-      setState(() {
-        _isPlaying = isPlaying;
-      });
-    }
-  }
-
-  Future<void> _initPlayer({bool autoPlay = false}) async {
-    if (!mounted) return;
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
-
-    try {
-      // Web'de dart:io dosyası yok; yerel yol oynatılamaz, ağ URL'si gibi denenir
-      final isLocal = !kIsWeb && (widget.videoUrl.startsWith('/') ||
-          widget.videoUrl.startsWith('file://') ||
-          widget.videoUrl.contains('/data/') ||
-          widget.videoUrl.contains('/storage/'));
-
-      if (isLocal) {
-        final cleanPath = widget.videoUrl.replaceFirst(RegExp(r'^file://'), '');
-        _videoPlayerController = VideoPlayerController.file(File(cleanPath));
-      } else {
-        _videoPlayerController = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
-      }
-
-      await _videoPlayerController!.initialize();
-      _videoPlayerController!.addListener(_videoListener);
-
-      _chewieController = ChewieController(
-        videoPlayerController: _videoPlayerController!,
-        aspectRatio: _videoPlayerController!.value.aspectRatio,
-        autoPlay: autoPlay,
-        looping: false,
-        allowFullScreen: true,
-        materialProgressColors: ChewieProgressColors(
-          playedColor: AppTheme.accent,
-          handleColor: AppTheme.accent,
-          backgroundColor: AppTheme.surfaceElevated,
-          bufferedColor: AppTheme.primary.withValues(alpha: 0.3),
-        ),
-      );
-
-      if (mounted) {
-        setState(() {
-          _isInit = true;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _error = 'Video yüklenemedi: $e';
-        });
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) =>
-      MaxWidthBox(maxWidth: 640, child: _buildPlayer(context));
-
-  Widget _buildPlayer(BuildContext context) {
-    if (_isInit && _chewieController != null && _videoPlayerController != null) {
-      return AspectRatio(
-        aspectRatio: _videoPlayerController!.value.aspectRatio,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              Chewie(controller: _chewieController!),
-              if (!_isPlaying)
-                GestureDetector(
-                  onTap: () {
-                    _chewieController!.play();
-                  },
-                  child: Container(
-                    color: Colors.black38, // Ön izleme hafif karartma
-                    child: Center(
-                      child: Container(
-                        width: 56,
-                        height: 56,
-                        decoration: BoxDecoration(
-                          color: AppTheme.accent.withValues(alpha: 0.95),
-                          shape: BoxShape.circle,
-                          boxShadow: AppTheme.glowAccent,
-                        ),
-                        child: const Icon(
-                          Icons.play_arrow_rounded,
-                          size: 38,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return Container(
-      width: double.infinity,
-      height: 180,
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceLight,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Center(
-        child: _isLoading
-            ? const CircularProgressIndicator(color: AppTheme.accent)
-            : _error != null
-                ? Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.error_outline, color: AppTheme.error, size: 24),
-                        const SizedBox(height: 6),
-                        Text(
-                          _error!,
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.inter(color: AppTheme.error, fontSize: 12),
-                        ),
-                        TextButton(
-                          onPressed: () => _initPlayer(autoPlay: false),
-                          child: const Text('Tekrar Dene', style: TextStyle(color: AppTheme.accent)),
-                        ),
-                      ],
-                    ),
-                  )
-                : Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.play_circle_fill, size: 48, color: AppTheme.accent),
-                        onPressed: () => _initPlayer(autoPlay: true),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Videoyu Oynat',
-                        style: GoogleFonts.inter(color: AppTheme.textSecondary, fontSize: 13, fontWeight: FontWeight.w500),
-                      ),
-                    ],
-                  ),
-      ),
-    );
-  }
 }

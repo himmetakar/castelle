@@ -51,13 +51,13 @@ class _AppShellState extends State<AppShell> {
           onToken: (token) => authProvider.updateFcmToken(token),
         );
       }
-      _loadActiveProjects();
+      _loadActiveProjects(publicOnly: role == null || role == 'actor');
     });
   }
 
-  Future<void> _loadActiveProjects() async {
+  Future<void> _loadActiveProjects({bool publicOnly = true}) async {
     try {
-      final list = await ProjectService().getActiveProjects();
+      final list = await ProjectService().getActiveProjects(publicOnly: publicOnly);
       if (mounted) {
         setState(() {
           _activeProjects = list;

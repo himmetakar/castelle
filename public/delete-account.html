@@ -259,20 +259,35 @@
                         <label for="reason">Hesap Silme Nedeni (İsteğe Bağlı)</label>
                         <textarea id="reason" rows="3" placeholder="Hizmetten neden ayrılmak istediğinizi belirtebilirsiniz."></textarea>
                     </div>
-                    <button type="submit" class="submit-btn">Hesap Silme Talebini Gönder</button>
+                    <button type="submit" class="submit-btn">Silme Talebi E-postasını Hazırla</button>
                 </form>
 
                 <div id="successMessage" class="success-message">
-                    <h3>Talebiniz Alındı</h3>
-                    <p>Hesap silme talebiniz başarıyla gönderilmiştir. Güvenliğiniz için kayıtlı e-posta adresiniz üzerinden bir doğrulama maili gönderilebilir. Talebiniz en kısa sürede incelenip onaylanacaktır.</p>
+                    <h3>E-posta Taslağınız Hazır</h3>
+                    <p>Talebiniz e-posta uygulamanızda hazırlandı. Talebin işleme alınabilmesi için lütfen e-postayı <strong>uygulamaya kayıtlı e-posta adresinizden</strong> gönderin. E-posta uygulamanız açılmadıysa talebinizi doğrudan <a href="mailto:casttelleyazilim@gmail.com">casttelleyazilim@gmail.com</a> adresine iletebilirsiniz.</p>
                 </div>
             </div>
         </main>
 
         <script>
+            // Önceki sürüm talebi hiçbir yere göndermeden "Talebiniz alındı"
+            // gösteriyordu (KVKK md. 11 / Google Play hesap silme şartı).
+            // Artık talep, kayıtlı e-posta adresinden gönderilmek üzere
+            // e-posta taslağı olarak hazırlanır.
             function handleSubmit(event) {
                 event.preventDefault();
-                // Send demand simulation
+                var name = document.getElementById('fullName').value.trim();
+                var email = document.getElementById('email').value.trim();
+                var reason = document.getElementById('reason').value.trim();
+                var subject = 'Castelle Hesap Silme Talebi (KVKK md. 11)';
+                var body = 'Merhaba,\n\nCastelle hesabımın ve tüm kişisel verilerimin silinmesini talep ediyorum.\n\n'
+                    + 'Ad Soyad: ' + name + '\n'
+                    + 'Kayıtlı E-posta: ' + email + '\n'
+                    + (reason ? 'Neden: ' + reason + '\n' : '')
+                    + '\nBu e-postayı uygulamaya kayıtlı e-posta adresimden gönderiyorum.';
+                window.location.href = 'mailto:casttelleyazilim@gmail.com'
+                    + '?subject=' + encodeURIComponent(subject)
+                    + '&body=' + encodeURIComponent(body);
                 document.getElementById('deleteForm').style.display = 'none';
                 document.getElementById('successMessage').style.display = 'block';
             }

@@ -1,0 +1,79 @@
+rules_version = '2';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Castelle — Firebase Storage Güvenlik Kuralları
+//
+// Daha önce projede Storage kuralı dosyası yoktu (Console'daki kural
+// geçerliydi). Bu dosya ile:
+//  • Herkes yalnızca KENDİ profil klasörüne dosya yükleyebilir.
+//  • Audition videolarını oyuncu yalnızca kendi adıyla yükleyebilir;
+//    yüklenmiş videoyu sadece admin/moderatör silebilir/değiştirebilir
+//    (yedek kaybını ve başkasının videosunun üzerine yazılmasını önler).
+//  • Proje dosyalarını sadece admin/moderatör yükleyebilir.
+//  • Dosya türü ve boyutu sınırlandırılır.
+//
+// DEPLOY: firebase deploy --only storage
+// (İlk deploy'da Firebase, Storage'ın Firestore'daki rolleri okuyabilmesi
+//  için izin isteyebilir — onaylayın.)
+// ═══════════════════════════════════════════════════════════════════════════
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userRole() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isStaff() {
+      return isSignedIn() && userRole() in ['admin', 'moderator'];
+    }
+
+    function isMedia() {
+      return request.resource.contentType.matches('image/.*')
+        || request.resource.contentType.matches('video/.*')
+        || request.resource.contentType.matches('audio/.*')
+        || request.resource.contentType == 'application/pdf';
+    }
+
+    function isVideo() {
+      return request.resource.contentType.matches('video/.*');
+    }
+
+    // Profil fotoğrafları, profil videoları, CV
+    match /profiles/{userId}/{allPaths=**} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn()
+        && (request.auth.uid == userId || isStaff())
+        && isMedia()
+        && request.resource.size < 500 * 1024 * 1024;
+      allow delete: if isSignedIn() && (request.auth.uid == userId || isStaff());
+    }
+
+    // Audition videoları: dosya adı "<oyuncuUid>_<projeId>_<zaman>.<uzantı>"
+    match /auditions/{projectId}/{fileName} {
+      allow read: if isSignedIn()
+        && (isStaff() || fileName.matches(request.auth.uid + '_.*'));
+      allow create: if isSignedIn()
+        && fileName.matches(request.auth.uid + '_.*')
+        && isVideo()
+        && request.resource.size < 1024 * 1024 * 1024;
+      allow update, delete: if isStaff();
+    }
+
+    // Proje galerisi, logo, örnek video, arka plan sesi
+    match /projects/{projectId}/{allPaths=**} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isStaff()
+        && (request.resource == null || isMedia());
+    }
+
+    // Diğer tüm yollar kapalı
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

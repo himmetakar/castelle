@@ -1,12 +1,12 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart' show XFile;
 import 'package:path_provider/path_provider.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:castelle/core/utils/platform_utils.dart';
-import 'package:castelle/core/utils/video_utils.dart';
 import 'package:video_compress/video_compress.dart';
 import 'package:castelle/core/models/audition_model.dart';
 import 'package:castelle/core/services/audition_service.dart';
+import 'package:castelle/core/utils/media_upload.dart';
 
 // Castelle - Audition Provider
 // Video kopyalama + yükleme + audition durum yönetimi
@@ -34,10 +34,41 @@ class AuditionProvider extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   bool get isProcessing => _isCompressing || _isUploading;
 
-  /// Mobil: videoyu sıkıştırıp uygulama klasörüne kalıcı kopyalar
-  /// (sıkıştırma başarısız olursa orijinali kopyalar).
-  Future<XFile> _compressAndPersist(XFile videoFile, String fileName) async {
-    File persistentFile;
+  /// Video sıkıştır, kalıcı dizine kaydet ve oluştur
+  Future<bool> submitAudition({
+    required XFile videoFile,
+    required String actorId,
+    required String actorName,
+    required String projectId,
+    required String projectTitle,
+    required String roleName,
+    String? note,
+    double? requestedBudget,
+    double? originalBudget,
+    String? scriptUsed,
+    /// Revize talebine yanıt olarak yükleniyorsa ilgili başvurunun id'si.
+    /// Verilirse yeni başvuru açılmaz; aynı kayıt güncellenir (eski video
+    /// yedek olarak saklanır).
+    String? revisionOfAuditionId,
+  }) async {
+    _errorMessage = null;
+    final originalSize = await videoFile.length();
+
+    // ADIM 1: SIKIŞTIRMA (Veya hata durumunda doğrudan kopyalama)
+    _isCompressing = true;
+    _compressProgress = 0;
+    notifyListeners();
+
+    XFile persistentFile;
+    final fileName =
+        '${actorId}_${projectId}_${DateTime.now().millisecondsSinceEpoch}.mp4';
+
+    try {
+      if (kIsWeb) {
+        // Web'de video_compress ve path_provider çalışmaz; video olduğu gibi
+        // yüklenir.
+        persistentFile = videoFile;
+      } else {
       final appDir = await getApplicationDocumentsDirectory();
       final videosDir = Directory('${appDir.path}/audition_videos');
       if (!await videosDir.exists()) {
@@ -83,7 +114,7 @@ class AuditionProvider extends ChangeNotifier {
 
       if (compressedFile != null) {
         // Sıkıştırılmış videoyu kalıcı konuma kopyala
-        persistentFile = await compressedFile.copy(destPath);
+        persistentFile = XFile((await compressedFile.copy(destPath)).path);
         debugPrint('💾 [Sıkıştırılmış Video Kaydedildi]: ${persistentFile.path}');
       } else {
         debugPrint('📂 [Sıkıştırma Başarısız/Atlandı] Orijinal dosya kopyalanıyor...');
@@ -93,7 +124,7 @@ class AuditionProvider extends ChangeNotifier {
           notifyListeners();
           await Future.delayed(const Duration(milliseconds: 50));
         }
-        persistentFile = await File(videoFile.path).copy(destPath);
+        persistentFile = XFile((await File(videoFile.path).copy(destPath)).path);
         debugPrint('💾 [Orijinal Video Kaydedildi (Fallback)]: ${persistentFile.path}');
       }
 
@@ -101,39 +132,7 @@ class AuditionProvider extends ChangeNotifier {
       try {
         await VideoCompress.deleteAllCache();
       } catch (_) {}
-
-    return XFile(persistentFile.path);
-  }
-
-  /// Video sıkıştır, kalıcı dizine kaydet ve oluştur
-  Future<bool> submitAudition({
-    required XFile videoFile,
-    required String actorId,
-    required String actorName,
-    required String projectId,
-    required String projectTitle,
-    required String roleName,
-    String? note,
-    double? requestedBudget,
-    double? originalBudget,
-  }) async {
-    _errorMessage = null;
-    final originalSize = await videoFile.length();
-
-    // ADIM 1: SIKIŞTIRMA (Veya hata durumunda doğrudan kopyalama)
-    _isCompressing = true;
-    _compressProgress = 0;
-    notifyListeners();
-
-    XFile persistentFile;
-    final fileName =
-        '${actorId}_${projectId}_${DateTime.now().millisecondsSinceEpoch}.mp4';
-
-    try {
-      // Web: video_compress ve yerel dosya sistemi yok; seçilen dosya doğrudan yüklenir
-      persistentFile = kIsWeb
-          ? videoFile
-          : await _compressAndPersist(videoFile, fileName);
+      }
 
       _compressProgress = 1.0;
       _isCompressing = false;
@@ -170,7 +169,7 @@ class AuditionProvider extends ChangeNotifier {
       // Video süresini al – video_player ile (güvenilir)
       int durationSec = 0;
       try {
-        final ctrl = localVideoController(persistentFile.path);
+        final ctrl = MediaUpload.videoController(persistentFile.path);
         await ctrl.initialize();
         durationSec = ctrl.value.duration.inSeconds;
         await ctrl.dispose();
@@ -185,6 +184,21 @@ class AuditionProvider extends ChangeNotifier {
           : persistentFile.path;
 
       debugPrint('📝 [Audition Kaydediliyor] videoUrl: $finalVideoUrl');
+
+      if (revisionOfAuditionId != null && revisionOfAuditionId.isNotEmpty) {
+        await _service.resubmitAudition(
+          auditionId: revisionOfAuditionId,
+          newVideoUrl: finalVideoUrl,
+          videoDurationSec: durationSec,
+          videoSizeBytes: fileSize,
+          originalSizeBytes: originalSize,
+          note: note,
+          requestedBudget: requestedBudget,
+          scriptUsed: scriptUsed,
+        );
+        notifyListeners();
+        return true;
+      }
 
       final audition = AuditionModel(
         id: '',
@@ -202,6 +216,7 @@ class AuditionProvider extends ChangeNotifier {
         requestedBudget: requestedBudget,
         originalBudget: originalBudget,
         createdAt: DateTime.now(),
+        scriptUsed: scriptUsed,
       );
 
       await _service.createAudition(audition);

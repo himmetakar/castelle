@@ -10,6 +10,8 @@ import 'package:castelle/core/models/user_model.dart';
 import 'package:castelle/core/models/actor_profile_model.dart';
 import 'package:castelle/core/providers/auth_provider.dart';
 import 'package:castelle/core/services/private_profile_fields.dart';
+import 'package:castelle/core/services/actor_profile_service.dart';
+import 'package:castelle/core/widgets/approval_status_badge.dart';
 import 'package:castelle/features/admin/screens/actor_filter_screen.dart';
 import 'package:castelle/features/admin/screens/actor_detail_screen.dart';
 
@@ -26,8 +28,37 @@ class AdminUsersScreen extends StatefulWidget {
 class _AdminUsersScreenState extends State<AdminUsersScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   UserRole? _filterRole;
+  /// Oyuncu onay durumu filtresi: null = tümü, 'approved', 'pending', 'rejected'
+  String? _approvalFilter;
   String _searchQuery = '';
   final _searchController = TextEditingController();
+
+  /// Hassas alanlar (e-posta, telefon…) users/{uid}/private altında —
+  /// yalnızca admin/moderatör okuyabilir. Liste ve arama için bir kez çekilir.
+  Map<String, Map<String, dynamic>> _privateByUid = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPrivateFields();
+  }
+
+  Future<void> _loadPrivateFields() async {
+    try {
+      final snap = await _firestore.collectionGroup(AppConstants.privateCollection).get();
+      final map = <String, Map<String, dynamic>>{};
+      for (final doc in snap.docs) {
+        final uid = doc.reference.parent.parent?.id;
+        if (uid != null) map[uid] = doc.data();
+      }
+      if (mounted) setState(() => _privateByUid = map);
+    } catch (e) {
+      debugPrint('ℹ️ [AdminUsers] Private alanlar okunamadı: $e');
+    }
+  }
+
+  Map<String, dynamic> _merged(QueryDocumentSnapshot<Map<String, dynamic>> doc) =>
+      {...doc.data(), ...?_privateByUid[doc.id]};
 
   @override
   void dispose() {
@@ -132,6 +163,31 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
             ),
           ).animate().fadeIn(duration: 300.ms),
 
+          // Onay durumu filtresi — onaylı / onaysız profiller ayrı listelenir
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Row(
+              children: [
+                for (final opt in const [
+                  (null, 'Tümü'),
+                  ('approved', 'Onaylı'),
+                  ('pending', 'Onay Bekleyen'),
+                  ('rejected', 'Reddedilen'),
+                ])
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(opt.$2, style: GoogleFonts.inter(fontSize: 12)),
+                      selected: _approvalFilter == opt.$1,
+                      selectedColor: AppTheme.accent.withValues(alpha: 0.2),
+                      onSelected: (_) => setState(() => _approvalFilter = opt.$1),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+
           // Filtre badge
           if (_filterRole != null)
             Padding(
@@ -207,11 +263,24 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
 
         final docs = snapshot.data?.docs ?? [];
 
-        // Arama filtresi (client-side)
-        final filteredDocs = _searchQuery.isEmpty
+        // Onay durumu filtresi (veri tabanındaki approvalStatus alanı)
+        final approvalDocs = _approvalFilter == null
             ? docs
             : docs.where((doc) {
                 final data = doc.data();
+                if (data['role'] != UserRole.actor.value) return false;
+                final st = (data['approvalStatus'] as String?) ?? 'pending';
+                if (_approvalFilter == 'pending') {
+                  return st == 'pending' || st == 'pending_guardian';
+                }
+                return st == _approvalFilter;
+              }).toList();
+
+        // Arama filtresi (client-side)
+        final filteredDocs = _searchQuery.isEmpty
+            ? approvalDocs
+            : approvalDocs.where((doc) {
+                final data = _merged(doc);
                 final name =
                     (data['fullName'] ?? '').toString().toLowerCase();
                 final email =
@@ -251,13 +320,37 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
           separatorBuilder: (_, _) => const SizedBox(height: 8),
           itemBuilder: (context, index) {
             final doc = filteredDocs[index];
-            final user = UserModel.fromMap(doc.data(), doc.id);
+            final data = _merged(doc);
+            final user = UserModel.fromMap(data, doc.id);
+            _rawById[doc.id] = data;
 
             return _buildUserCard(context, user, index);
           },
         );
       },
     );
+  }
+
+  /// Kart üzerinde sürüm/platform bilgisi göstermek için ham belge verisi.
+  final Map<String, Map<String, dynamic>> _rawById = {};
+
+  String _versionLine(UserModel user) {
+    final raw = _rawById[user.uid];
+    if (raw == null) return '';
+    final v = raw['appVersion'];
+    final b = raw['appBuild'];
+    final pf = raw['appPlatform'];
+    if (v == null && pf == null) return '';
+    final parts = <String>[
+      if (v != null) 'v$v${b != null ? ' ($b)' : ''}',
+      if (pf != null) '$pf',
+    ];
+    final seen = raw['lastSeenAt'];
+    if (seen is Timestamp) {
+      final d = seen.toDate();
+      parts.add('${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')} ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}');
+    }
+    return parts.join(' · ');
   }
 
   Widget _buildUserCard(BuildContext context, UserModel user, int index) {
@@ -343,7 +436,12 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 4),
-                // Rol chip
+                // Rol chip + (oyuncular için) onay durumu etiketi
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -363,6 +461,24 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                     ),
                   ),
                 ),
+                    if (user.role == UserRole.actor)
+                      ApprovalStatusBadge(
+                        status: user.approvalStatus,
+                        approvedAt: user.approvedAt,
+                        compact: true,
+                      ),
+                  ],
+                ),
+                // Hangi sürüm / platform / son görülme — sahadan gelen
+                // "bende oluyor onda olmuyor" şikayetlerini ayıklamak için.
+                if (_versionLine(user).isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    _versionLine(user),
+                    style: GoogleFonts.inter(fontSize: 10, color: AppTheme.textTertiary),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ],
             ),
           ),
@@ -460,6 +576,13 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                           color: AppTheme.textTertiary,
                         ),
                       ),
+                      if (user.role == UserRole.actor) ...[
+                        const SizedBox(height: 6),
+                        ApprovalStatusBadge(
+                          status: user.approvalStatus,
+                          approvedAt: user.approvedAt,
+                        ),
+                      ],
                       if (user.isUnder18) ...[
                         const SizedBox(height: 6),
                         Container(
@@ -560,7 +683,8 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                   try {
                     final doc = await _firestore.collection('users').doc(user.uid).get();
                     if (doc.exists && context.mounted) {
-                      final actorProfile = ActorProfileModel.fromMap(doc.data()!, doc.id);
+                      final actorProfile = ActorProfileModel.fromMap(
+                          {...doc.data()!, ...await readPrivateFields(_firestore, doc.id)}, doc.id);
                       Navigator.push(
                         context,
                         MaterialPageRoute(builder: (_) => ActorDetailScreen(actor: actorProfile)),
@@ -572,19 +696,36 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                 },
               ),
 
-              // Profil Onayla / Reddet
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.verified_user_outlined, color: AppTheme.success),
-                title: Text(
-                  'Oyuncuyu Onayla (Yayına Al)',
-                  style: GoogleFonts.inter(color: AppTheme.success, fontWeight: FontWeight.w500),
+              // Profil Onayla / Reddet — daha önce onaylanmış profilde
+              // tekrar onay butonu yerine durum bilgisi gösterilir.
+              if (user.approvalStatus == 'approved')
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.verified, color: AppTheme.success),
+                  title: Text(
+                    'Bu profil daha önce onaylandı',
+                    style: GoogleFonts.inter(color: AppTheme.success, fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: user.approvedAt != null
+                      ? Text(
+                          'Onay tarihi: ${user.approvedAt!.day.toString().padLeft(2, '0')}.${user.approvedAt!.month.toString().padLeft(2, '0')}.${user.approvedAt!.year}',
+                          style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textTertiary),
+                        )
+                      : null,
+                )
+              else
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.verified_user_outlined, color: AppTheme.success),
+                  title: Text(
+                    'Oyuncuyu Onayla (Yayına Al)',
+                    style: GoogleFonts.inter(color: AppTheme.success, fontWeight: FontWeight.w500),
+                  ),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _approveActorProfile(user);
+                  },
                 ),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _approveActorProfile(user);
-                },
-              ),
 
               ListTile(
                 contentPadding: EdgeInsets.zero,
@@ -726,9 +867,47 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   }
 
   Future<void> _approveActorProfile(UserModel user) async {
+    // 18 yaş altı: veli onayı kaydedilmeden yayına alınamaz.
+    if (user.isUnder18 && !user.isGuardianApproved) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppTheme.surfaceCard,
+          title: Text('Veli Onayı Gerekli',
+              style: GoogleFonts.outfit(fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+          content: Text(
+            '${user.fullName} 18 yaşından küçük. Veli '
+            '(${user.guardianName ?? '-'} · ${user.guardianPhone ?? '-'}) ile görüşüp '
+            'onay aldıysanız "Veli Onayı Alındı" deyin; profil hemen ardından onaylanır.',
+            style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textSecondary, height: 1.5),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Vazgeç')),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.success, foregroundColor: Colors.white),
+              child: const Text('Veli Onayı Alındı'),
+            ),
+          ],
+        ),
+      );
+      if (ok != true || !mounted) return;
+      try {
+        final adminName = context.read<AuthProvider>().user?.fullName;
+        await ActorProfileService().approveGuardian(user.uid, approvedByName: adminName);
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Veli onayı kaydedilemedi: $e'), backgroundColor: AppTheme.error),
+          );
+        }
+        return;
+      }
+    }
     try {
       await _firestore.collection(AppConstants.usersCollection).doc(user.uid).update({
         'approvalStatus': 'approved',
+        'approvedAt': FieldValue.serverTimestamp(),
         'isActive': true,
         'isHidden': false,
         'updatedAt': FieldValue.serverTimestamp(),

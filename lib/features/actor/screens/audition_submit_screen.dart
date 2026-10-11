@@ -1,5 +1,6 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:castelle/core/utils/video_utils.dart';
+import 'package:castelle/core/utils/media_upload.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -8,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
 import 'package:castelle/core/theme/app_theme.dart';
 import 'package:castelle/core/models/project_model.dart';
+import 'package:castelle/core/models/audition_model.dart';
 import 'package:castelle/core/providers/auth_provider.dart';
 import 'package:castelle/features/actor/providers/audition_provider.dart';
 import 'package:castelle/core/widgets/video_record_screen.dart';
@@ -21,12 +23,17 @@ class AuditionSubmitScreen extends StatefulWidget {
   final String? customScript;
   final bool budgetFlexible;
 
+  /// Revize talebine yanıt veriliyorsa ilgili başvuru. Bu durumda yeni
+  /// başvuru açılmaz, aynı başvurunun videosu güncellenir.
+  final AuditionModel? revisionOf;
+
   const AuditionSubmitScreen({
     super.key,
     required this.project,
     required this.role,
     this.customScript,
     this.budgetFlexible = false,
+    this.revisionOf,
   });
 
   @override
@@ -44,10 +51,20 @@ class _AuditionSubmitScreenState extends State<AuditionSubmitScreen> {
   int? _fileSizeBytes;
   double? _requestedBudget;
 
+  /// Bu karakter için çekilecek senaryo (davetteki özel metin > rol metni)
+  String? get _script {
+    final custom = widget.customScript?.trim();
+    if (custom != null && custom.isNotEmpty) return custom;
+    final roleScript = widget.role.auditionScript?.trim();
+    return (roleScript == null || roleScript.isEmpty) ? null : roleScript;
+  }
+
+  double? get _displayBudget => widget.role.budget ?? widget.project.budget;
+
   @override
   void initState() {
     super.initState();
-    _requestedBudget = widget.role.budget;
+    _requestedBudget = widget.revisionOf?.requestedBudget ?? widget.role.budget;
     if (_requestedBudget != null) {
       _budgetController.text = _requestedBudget!.toStringAsFixed(0);
     }
@@ -71,9 +88,14 @@ class _AuditionSubmitScreenState extends State<AuditionSubmitScreen> {
 
     debugPrint('📹 [image_picker] xFile.path: "${xFile.path}"');
 
-    final file = xFile;
+    await _setSelectedVideo(xFile);
+  }
+
+  /// Seçilen/çekilen videoyu kaydeder ve önizlemeyi başlatır.
+  /// Web'de path bir blob: adresidir; dart:io File kullanılmaz.
+  Future<void> _setSelectedVideo(XFile file) async {
     final size = await file.length();
-    debugPrint('📹 [image_picker] Dosya boyutu: ${(size / 1024 / 1024).toStringAsFixed(2)} MB');
+    debugPrint('📹 [Video] Dosya boyutu: ${(size / 1024 / 1024).toStringAsFixed(2)} MB');
 
     setState(() {
       _selectedVideo = file;
@@ -81,30 +103,31 @@ class _AuditionSubmitScreenState extends State<AuditionSubmitScreen> {
       _isVideoReady = false;
     });
 
-    // Video önizleme başlat – çift yöntem
     _videoController?.dispose();
     try {
-      _videoController = localVideoController(file.path);
+      _videoController = MediaUpload.videoController(file.path);
       await _videoController!.initialize();
       setState(() => _isVideoReady = true);
-      debugPrint('✅ [Preview] file() yöntemi başarılı.');
     } catch (e) {
-      debugPrint('⚠️ [Preview] file() başarısız: $e → networkUrl(Uri.file()) deneniyor...');
-      _videoController?.dispose();
-      try {
-        _videoController = VideoPlayerController.networkUrl(Uri.file(xFile.path));
-        await _videoController!.initialize();
-        setState(() => _isVideoReady = true);
-        debugPrint('✅ [Preview] networkUrl(Uri.file()) başarılı.');
-      } catch (e2) {
-        debugPrint('❌ [Preview] Her iki yöntem başarısız: $e2');
-        setState(() => _isVideoReady = false);
+      debugPrint('⚠️ [Preview] Önizleme başlatılamadı: $e');
+      if (!kIsWeb) {
+        // Mobilde ikinci yöntem: file:// adresi ile dene
+        _videoController?.dispose();
+        try {
+          _videoController = VideoPlayerController.networkUrl(Uri.file(file.path));
+          await _videoController!.initialize();
+          setState(() => _isVideoReady = true);
+          return;
+        } catch (e2) {
+          debugPrint('❌ [Preview] Her iki yöntem başarısız: $e2');
+        }
       }
+      setState(() => _isVideoReady = false);
     }
   }
 
   Future<void> _recordCustomVideo() async {
-    final script = widget.customScript ?? widget.role.auditionScript;
+    final script = _script;
     final audioUrl = widget.role.backgroundAudioUrl; // Rol bazlı arka plan sesi
     final videoPath = await Navigator.push<String>(
       context,
@@ -118,24 +141,7 @@ class _AuditionSubmitScreenState extends State<AuditionSubmitScreen> {
 
     if (videoPath == null || videoPath.isEmpty) return;
 
-    final file = XFile(videoPath);
-    final size = await file.length();
-
-    setState(() {
-      _selectedVideo = file;
-      _fileSizeBytes = size;
-      _isVideoReady = false;
-    });
-
-    _videoController?.dispose();
-    try {
-      _videoController = localVideoController(file.path);
-      await _videoController!.initialize();
-      setState(() => _isVideoReady = true);
-    } catch (e) {
-      debugPrint('⚠️ [Preview] custom record file failed: $e');
-      setState(() => _isVideoReady = false);
-    }
+    await _setSelectedVideo(XFile(videoPath));
   }
 
   Future<void> _handleSubmit() async {
@@ -144,7 +150,7 @@ class _AuditionSubmitScreenState extends State<AuditionSubmitScreen> {
     // Deadline check
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    if (widget.project.deadline != null) {
+    if (widget.project.deadline != null && widget.revisionOf == null) {
       final deadlineDate = DateTime(widget.project.deadline!.year, widget.project.deadline!.month, widget.project.deadline!.day);
       if (deadlineDate.isBefore(today)) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -172,6 +178,8 @@ class _AuditionSubmitScreenState extends State<AuditionSubmitScreen> {
           : _noteController.text.trim(),
       requestedBudget: _requestedBudget,
       originalBudget: widget.role.budget,
+      scriptUsed: _script,
+      revisionOfAuditionId: widget.revisionOf?.id,
     );
 
     if (mounted) {
@@ -202,7 +210,8 @@ class _AuditionSubmitScreenState extends State<AuditionSubmitScreen> {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     bool isDeadlinePassed = false;
-    if (widget.project.deadline != null) {
+    // Revize talebinde son başvuru tarihi geçmiş olsa da yeni video yüklenebilir
+    if (widget.project.deadline != null && widget.revisionOf == null) {
       final deadlineDate = DateTime(widget.project.deadline!.year, widget.project.deadline!.month, widget.project.deadline!.day);
       isDeadlinePassed = deadlineDate.isBefore(today);
     }
@@ -210,7 +219,7 @@ class _AuditionSubmitScreenState extends State<AuditionSubmitScreen> {
     return Scaffold(
       backgroundColor: AppTheme.surface,
       appBar: AppBar(
-        title: const Text('Audition Gönder'),
+        title: Text(widget.revisionOf != null ? 'Revize Video Gönder' : 'Audition Gönder'),
         leading: IconButton(
           icon: const Icon(Icons.close),
           onPressed: auditionProvider.isProcessing
@@ -250,6 +259,12 @@ class _AuditionSubmitScreenState extends State<AuditionSubmitScreen> {
                   ],
                 ),
               ),
+              const SizedBox(height: 16),
+            ],
+
+            // Revize talebi notu
+            if (widget.revisionOf != null) ...[
+              _buildRevisionBanner(widget.revisionOf!),
               const SizedBox(height: 16),
             ],
 
@@ -401,9 +416,9 @@ class _AuditionSubmitScreenState extends State<AuditionSubmitScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               _buildSectionTitle('Proje Bütçesi'),
-              if (widget.role.budget != null)
+              if (_displayBudget != null)
                 Text(
-                  '${widget.role.budget!.toStringAsFixed(0)} ₺',
+                  '${_displayBudget!.toStringAsFixed(0)} ₺',
                   style: GoogleFonts.outfit(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
@@ -450,6 +465,49 @@ class _AuditionSubmitScreenState extends State<AuditionSubmitScreen> {
               },
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRevisionBanner(AuditionModel audition) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.accent.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        border: Border.all(color: AppTheme.accent.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.replay_circle_filled_outlined, color: AppTheme.accent, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                'Revize Talebi',
+                style: GoogleFonts.outfit(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.accent,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            (audition.reviewerNote?.trim().isNotEmpty ?? false)
+                ? audition.reviewerNote!
+                : 'Videonuzu tekrar çekmeniz istendi.',
+            style: GoogleFonts.inter(fontSize: 13.5, color: AppTheme.textPrimary, height: 1.45),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Yeni videonuz aynı başvuruya eklenecek; önceki videonuz yedek olarak saklanır.',
+            style: GoogleFonts.inter(fontSize: 11.5, color: AppTheme.textTertiary),
+          ),
         ],
       ),
     );

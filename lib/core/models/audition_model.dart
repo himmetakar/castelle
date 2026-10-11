@@ -4,14 +4,19 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 // Oyuncu audition (deneme çekimi) gönderimi
 
 /// Audition durumu
+///
+/// Başvurular ekranında (oyuncu ve panel) yalnızca 5 durum gösterilir:
+/// Gönderildi · Opsiyon · Onaylandı · Reddedildi · Revizyon.
+/// `uploading` ve `reviewing` teknik ara durumlardır ve kullanıcıya
+/// "Gönderildi" olarak yansıtılır.
 enum AuditionStatus {
-  uploading('uploading', 'Yükleniyor'),
-  submitted('submitted', 'İşlem Bekliyor'),
-  reviewing('reviewing', 'İnceleniyor'),
-  options('options', 'Opsiyonlu'),
+  uploading('uploading', 'Gönderildi'),
+  submitted('submitted', 'Gönderildi'),
+  reviewing('reviewing', 'Gönderildi'),
+  options('options', 'Opsiyon'),
   approved('approved', 'Onaylandı'),
   rejected('rejected', 'Reddedildi'),
-  revision('revision', 'Revizyon İstendi');
+  revision('revision', 'Revizyon');
 
   const AuditionStatus(this.value, this.displayName);
   final String value;
@@ -23,6 +28,28 @@ enum AuditionStatus {
       orElse: () => AuditionStatus.submitted,
     );
   }
+
+  /// Kullanıcıya gösterilen 5 ana durumdan hangisine karşılık geldiği.
+  AuditionStatus get displayGroup => switch (this) {
+        AuditionStatus.uploading ||
+        AuditionStatus.submitted ||
+        AuditionStatus.reviewing =>
+          AuditionStatus.submitted,
+        _ => this,
+      };
+
+  /// Gösterilen 5 durum (sekme sırası).
+  static const List<AuditionStatus> visibleStatuses = [
+    AuditionStatus.submitted,
+    AuditionStatus.options,
+    AuditionStatus.approved,
+    AuditionStatus.rejected,
+    AuditionStatus.revision,
+  ];
+
+  /// Bir sekmeye (5 ana durumdan biri) düşen gerçek durum değerleri.
+  static List<AuditionStatus> membersOf(AuditionStatus group) =>
+      AuditionStatus.values.where((s) => s.displayGroup == group).toList();
 }
 
 /// Audition Modeli
@@ -54,6 +81,23 @@ class AuditionModel {
   final bool? optionAvailable;
   final String? optionExplanation;
 
+  // ── Yedekleme / geçmiş alanları ──
+  /// Panelden silindi mi? (Kalıcı silme yok — "Silinenler"den geri alınabilir.
+  /// Oyuncunun kendi geçmişinde kayıt görünmeye devam eder.)
+  final bool isDeleted;
+  final DateTime? deletedAt;
+  final String? deletedByName;
+  /// Proje silindiğinde işaretlenir; başvuru kaydı geçmiş için korunur.
+  final bool projectDeleted;
+  /// Durum değişiklik tarihçesi: [{status, at(Timestamp), by, note}]
+  final List<Map<String, dynamic>> statusHistory;
+  /// Revize sonrası değiştirilen eski videolar: [{videoUrl, uploadedAt, reviewerNote}]
+  final List<Map<String, dynamic>> previousVersions;
+  final int revisionCount;
+  final DateTime? resubmittedAt;
+  /// Oyuncunun çekim sırasında kullandığı senaryo/prompter metni
+  final String? scriptUsed;
+
   const AuditionModel({
     required this.id,
     required this.actorId,
@@ -81,7 +125,24 @@ class AuditionModel {
     this.optionAnswers,
     this.optionAvailable,
     this.optionExplanation,
+    this.isDeleted = false,
+    this.deletedAt,
+    this.deletedByName,
+    this.projectDeleted = false,
+    this.statusHistory = const [],
+    this.previousVersions = const [],
+    this.revisionCount = 0,
+    this.resubmittedAt,
+    this.scriptUsed,
   });
+
+  static List<Map<String, dynamic>> _mapList(dynamic raw) {
+    if (raw is! List) return const [];
+    return raw
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+  }
 
   factory AuditionModel.fromMap(Map<String, dynamic> map, String id) {
     return AuditionModel(
@@ -113,6 +174,15 @@ class AuditionModel {
           : null,
       optionAvailable: map['optionAvailable'] is bool ? map['optionAvailable'] as bool : null,
       optionExplanation: _strOrNull(map['optionExplanation']),
+      isDeleted: map['isDeleted'] == true,
+      deletedAt: _date(map['deletedAt']),
+      deletedByName: _strOrNull(map['deletedByName']),
+      projectDeleted: map['projectDeleted'] == true,
+      statusHistory: _mapList(map['statusHistory']),
+      previousVersions: _mapList(map['previousVersions']),
+      revisionCount: (map['revisionCount'] is num) ? (map['revisionCount'] as num).toInt() : 0,
+      resubmittedAt: _date(map['resubmittedAt']),
+      scriptUsed: _strOrNull(map['scriptUsed']),
     );
   }
 
@@ -170,6 +240,12 @@ class AuditionModel {
       'optionAnswers': optionAnswers,
       'optionAvailable': optionAvailable,
       'optionExplanation': optionExplanation,
+      'isDeleted': isDeleted,
+      'projectDeleted': projectDeleted,
+      'statusHistory': statusHistory,
+      'previousVersions': previousVersions,
+      'revisionCount': revisionCount,
+      'scriptUsed': scriptUsed,
     };
   }
 
@@ -220,6 +296,7 @@ class AuditionModel {
     Map<String, String>? optionAnswers,
     bool? optionAvailable,
     String? optionExplanation,
+    bool? isDeleted,
   }) {
     return AuditionModel(
       id: id ?? this.id,
@@ -248,6 +325,15 @@ class AuditionModel {
       optionAnswers: optionAnswers ?? this.optionAnswers,
       optionAvailable: optionAvailable ?? this.optionAvailable,
       optionExplanation: optionExplanation ?? this.optionExplanation,
+      isDeleted: isDeleted ?? this.isDeleted,
+      deletedAt: deletedAt,
+      deletedByName: deletedByName,
+      projectDeleted: projectDeleted,
+      statusHistory: statusHistory,
+      previousVersions: previousVersions,
+      revisionCount: revisionCount,
+      resubmittedAt: resubmittedAt,
+      scriptUsed: scriptUsed,
     );
   }
 }

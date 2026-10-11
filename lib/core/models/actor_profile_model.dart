@@ -12,8 +12,26 @@ enum Gender {
   final String displayName;
 
   static Gender fromString(String value) {
+    // Eski / elle girilmiş kayıtlarda 'Male', 'Erkek', 'KADIN' gibi
+    // farklı yazımlar olabiliyor; bunlar 'Diğer'e düşünce cinsiyet
+    // filtresine takılıp aramada görünmüyorlardı.
+    final v = value.trim().toLowerCase();
+    switch (v) {
+      case 'male':
+      case 'erkek':
+      case 'm':
+      case 'e':
+        return Gender.male;
+      case 'female':
+      case 'kadın':
+      case 'kadin':
+      case 'kız':
+      case 'f':
+      case 'k':
+        return Gender.female;
+    }
     return Gender.values.firstWhere(
-      (g) => g.value == value,
+      (g) => g.value == v,
       orElse: () => Gender.other,
     );
   }
@@ -80,6 +98,8 @@ class ActorProfileModel {
   bool get isUnder18 => _isUnder18 ?? false;
   final String? guardianName;
   final String? guardianPhone;
+  /// Veli onayı alındı mı? (Sadece admin/moderatör yazar; profil kaydı bunu değiştirmez.)
+  final bool isGuardianApproved;
   final bool ageConfirmed; // 18 yaş sorusu gerçekten cevaplandı mı?
 
   // Fiziksel özellikler
@@ -143,6 +163,9 @@ class ActorProfileModel {
   // Admin onay sistemi
   final String approvalStatus; // 'pending', 'approved', 'rejected'
   final String? adminNote;     // Admin'in düzenleyici mesajı
+  final DateTime? approvedAt;  // Son onay tarihi (yalnızca okunur)
+
+  bool get isApproved => approvalStatus == 'approved';
 
   // Yeni Detaylı Profil Alanları
   final String? bodyMeasurements; // Beden Ölçüleri (Örn: 90-60-90 / M)
@@ -172,6 +195,7 @@ class ActorProfileModel {
     bool? isUnder18 = false,
     this.guardianName,
     this.guardianPhone,
+    this.isGuardianApproved = false,
     this.ageConfirmed = true,
     this.age,
     this.birthYear,
@@ -204,6 +228,7 @@ class ActorProfileModel {
     this.isHidden = false,
     this.acceptedNdas = const [],
     this.approvalStatus = 'pending', // Yeni/Varsayılan kayıtlar onay bekler
+    this.approvedAt,
     this.adminNote,
     this.bodyMeasurements,
     this.shoeSize,
@@ -221,6 +246,30 @@ class ActorProfileModel {
   }) : _isUnder18 = isUnder18;
 
   /// Firestore'dan oluştur
+  /// Sayısal alanlar bazı kayıtlarda String ("185") veya double (185.0)
+  /// olarak durabiliyor. Doğrudan atama tip hatası verip o oyuncuyu (hatta
+  /// tüm listeyi) aramadan düşürüyordu; burada güvenli şekilde çevrilir.
+  static int? _asInt(dynamic v) {
+    if (v == null) return null;
+    if (v is int) return v;
+    if (v is num) return v.round();
+    final digits = v.toString().replaceAll(RegExp(r'[^0-9.,]'), '').replaceAll(',', '.');
+    if (digits.isEmpty) return null;
+    return double.tryParse(digits)?.round();
+  }
+
+  static DateTime? _asDate(dynamic v) {
+    if (v == null) return null;
+    if (v is DateTime) return v;
+    if (v is String) return DateTime.tryParse(v);
+    if (v is int) return DateTime.fromMillisecondsSinceEpoch(v);
+    try {
+      return (v as dynamic).toDate() as DateTime; // Firestore Timestamp
+    } catch (_) {
+      return null;
+    }
+  }
+
   factory ActorProfileModel.fromMap(Map<String, dynamic> map, String uid) {
     final skills = (map['skills'] as List<dynamic>?)
             ?.map((e) => e.toString())
@@ -333,14 +382,15 @@ class ActorProfileModel {
       isUnder18: map['isUnder18'] ?? false,
       guardianName: map['guardianName'] as String?,
       guardianPhone: map['guardianPhone'] as String?,
+      isGuardianApproved: map['isGuardianApproved'] == true,
       ageConfirmed: map['ageConfirmed'] ?? true,
-      age: map['age'],
-      birthYear: map['birthYear'],
+      age: _asInt(map['age']),
+      birthYear: _asInt(map['birthYear']),
       gender: map['gender'] != null
           ? Gender.fromString(map['gender'])
           : null,
-      heightCm: map['heightCm'],
-      weightKg: map['weightKg'],
+      heightCm: _asInt(map['heightCm']),
+      weightKg: _asInt(map['weightKg']),
       eyeColor: map['eyeColor'] != null
           ? EyeColor.fromString(map['eyeColor'])
           : null,
@@ -371,6 +421,7 @@ class ActorProfileModel {
       isHidden: map['isHidden'] ?? false,
       acceptedNdas: acceptedNdas,
       approvalStatus: map['approvalStatus'] as String? ?? 'pending',
+      approvedAt: _asDate(map['approvedAt']),
       adminNote: map['adminNote'] as String?,
       bodyMeasurements: map['bodyMeasurements'],
       shoeSize: map['shoeSize'],
@@ -550,6 +601,7 @@ class ActorProfileModel {
       isUnder18: isUnder18 ?? this.isUnder18,
       guardianName: guardianName ?? this.guardianName,
       guardianPhone: guardianPhone ?? this.guardianPhone,
+      isGuardianApproved: isGuardianApproved,
       ageConfirmed: ageConfirmed ?? this.ageConfirmed,
       age: age ?? this.age,
       birthYear: birthYear ?? this.birthYear,
@@ -583,6 +635,7 @@ class ActorProfileModel {
       acceptedNdas: acceptedNdas ?? this.acceptedNdas,
       approvalStatus: approvalStatus ?? this.approvalStatus,
       adminNote: adminNote ?? this.adminNote,
+      approvedAt: this.approvedAt,
       bodyMeasurements: bodyMeasurements ?? this.bodyMeasurements,
       shoeSize: shoeSize ?? this.shoeSize,
       actingEducation: actingEducation ?? this.actingEducation,

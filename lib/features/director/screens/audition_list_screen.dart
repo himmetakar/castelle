@@ -1,6 +1,6 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:castelle/core/utils/platform_utils.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -9,6 +9,8 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:dio/dio.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:castelle/core/theme/app_theme.dart';
+import 'package:castelle/core/services/private_profile_fields.dart';
+import 'package:castelle/features/director/screens/audition_trash_screen.dart';
 import 'package:castelle/core/models/audition_model.dart';
 import 'package:castelle/core/models/actor_profile_model.dart';
 import 'package:castelle/core/providers/auth_provider.dart';
@@ -43,25 +45,12 @@ class _AuditionListScreenState extends State<AuditionListScreen>
   String _downloadProgressText = '';
   double _downloadPercentage = 0.0;
 
-  // Tab sırası: İşlem Bekliyor, Opsiyon, Onaylandi, Reddedildi, Revizyon
-  // Ayrı "İnceleniyor" sekmesi kaldırıldı: indirilip incelemeye alınan
-  // (reviewing) audition'lar İşlem Bekliyor'da "İnceleniyor" etiketiyle durur.
-  final _tabs = const [
-    AuditionStatus.submitted,   // İşlem Bekliyor — submitted + reviewing
-    AuditionStatus.options,     // Opsiyon — opsiyon talep edilen
-    AuditionStatus.approved,
-    AuditionStatus.rejected,
-    AuditionStatus.revision,
-  ];
+  // Başvurularda yalnızca 5 durum: Gönderildi · Opsiyon · Onaylandı ·
+  // Reddedildi · Revizyon ("İnceleniyor" Gönderildi altında listelenir).
+  final _tabs = AuditionStatus.visibleStatuses;
 
-  // Admin/Moderatör panelinde görünecek özel etiketler
-  static const _tabLabels = [
-    'İşlem Bekliyor',
-    'Opsiyon',
-    'Onaylandı',
-    'Reddedildi',
-    'Revizyon',
-  ];
+  static final _tabLabels =
+      AuditionStatus.visibleStatuses.map((s) => s.displayName).toList();
 
   // Moderatör'ün atandığı proje ID'leri
   List<String> _moderatorProjectIds = [];
@@ -107,14 +96,8 @@ class _AuditionListScreenState extends State<AuditionListScreen>
     _loadAuditions(_tabs[_tabController.index]);
   }
 
-  /// Bir sekmenin kapsadığı durumlar
-  List<AuditionStatus> _statusesFor(AuditionStatus status) =>
-      status == AuditionStatus.submitted
-          ? const [AuditionStatus.submitted, AuditionStatus.reviewing]
-          : [status];
-
-  void _loadAuditions(AuditionStatus status) {
-    final statuses = _statusesFor(status);
+  void _loadAuditions(AuditionStatus group) {
+    final statuses = AuditionStatus.membersOf(group);
     if (widget.isModerator && _moderatorProjectIds.isNotEmpty) {
       // Moderatör: sadece kendi projelerindeki auditionları getir
       context.read<AuditionProvider>().loadAllAuditions(
@@ -159,6 +142,24 @@ class _AuditionListScreenState extends State<AuditionListScreen>
               )
             : null,
         actions: [
+          if (!_isSelectionMode &&
+              (widget.isAdmin ||
+                  (context.read<AuthProvider>().user?.hasModeratorPermission('auditionSilme') ?? false)))
+            IconButton(
+              icon: const Icon(Icons.delete_sweep_outlined),
+              tooltip: 'Silinenler (Geri Yükle)',
+              onPressed: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => AuditionTrashScreen(
+                      projectIds: widget.isModerator ? _moderatorProjectIds : null,
+                    ),
+                  ),
+                );
+                if (mounted) _loadAuditions(_tabs[_tabController.index]);
+              },
+            ),
           if (widget.isAdmin && auditions.isNotEmpty) ...[
             if (_isSelectionMode) ...[
               IconButton(
@@ -532,8 +533,6 @@ class _AuditionListScreenState extends State<AuditionListScreen>
                     runSpacing: 4,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      if (audition.status == AuditionStatus.reviewing)
-                        _buildMiniChip('İnceleniyor', AppTheme.primarySoft),
                       if (audition.projectTitle.trim().isNotEmpty)
                         _buildMiniChip(
                             audition.projectTitle, AppTheme.info),
@@ -644,7 +643,7 @@ class _AuditionListScreenState extends State<AuditionListScreen>
 
   String _emptyMessage(AuditionStatus status) {
     return switch (status) {
-      AuditionStatus.submitted => 'Bekleyen audition yok',
+      AuditionStatus.submitted => 'Gönderilen audition yok',
       AuditionStatus.reviewing => 'İncelenen audition yok',
       AuditionStatus.options => 'Opsiyonlanan audition yok',
       AuditionStatus.approved => 'Onaylanan audition yok',
@@ -681,16 +680,20 @@ class _AuditionListScreenState extends State<AuditionListScreen>
 
     final messenger = ScaffoldMessenger.of(context); // await'ten önce al
 
-    // Web'de klasör seçimi ve dart:io dosya yazma desteklenmiyor
+    // Web: tarayıcı klasör oluşturup dosya yazamaz (dart:io yok). Toplu
+    // klasörlü indirme sadece mobil uygulamada çalışır.
     if (kIsWeb) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Klasöre indirme web sürümünde desteklenmiyor. Lütfen mobil uygulamayı kullanın.'),
-            backgroundColor: AppTheme.warning,
-          ),
-        );
-      }
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Toplu indirme web sürümünde desteklenmiyor. Tek bir audition\'ı açıp videosunu indirebilir ya da mobil uygulamayı kullanabilirsiniz.'),
+          backgroundColor: AppTheme.warning,
+          duration: Duration(seconds: 5),
+        ),
+      );
+      setState(() {
+        _isSelectionMode = false;
+        _selectedAuditionIds.clear();
+      });
       return;
     }
 
@@ -723,8 +726,8 @@ class _AuditionListScreenState extends State<AuditionListScreen>
     }
 
     // 2. Depolama İzni İste (Sadece Android ve iOS için)
-    if (isAndroidApp || isIOSApp) {
-      if (isAndroidApp) {
+    if (Platform.isAndroid || Platform.isIOS) {
+      if (Platform.isAndroid) {
         final status = await Permission.manageExternalStorage.request();
         if (!status.isGranted) {
           await Permission.storage.request();
@@ -760,7 +763,11 @@ class _AuditionListScreenState extends State<AuditionListScreen>
           throw Exception('Oyuncu profil verisi bulunamadı.');
         }
 
-        final actorProfile = ActorProfileModel.fromMap(doc.data()!, doc.id);
+        final actorProfile = ActorProfileModel.fromMap({
+          ...doc.data()!,
+          // İletişim bilgileri private alt dokümanda (KVKK)
+          ...await readPrivateFields(FirebaseFirestore.instance, doc.id),
+        }, doc.id);
 
         // 2. Klasör Oluştur: (Proje Adı) - (Oyuncu Adı)
         final rawFolderName = "${audition.projectTitle} - ${audition.actorName}";

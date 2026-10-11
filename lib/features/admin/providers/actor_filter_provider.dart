@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:castelle/core/models/actor_profile_model.dart';
 import 'package:castelle/core/models/actor_filter_model.dart';
 import 'package:castelle/core/constants/app_constants.dart';
@@ -17,12 +18,36 @@ class ActorFilterProvider extends ChangeNotifier {
   String? _errorMessage;
   DocumentSnapshot? _lastDoc;
 
+  /// Oyuncular oyuncu havuzunda yalnızca herkese açık (gizli olmayan)
+  /// profilleri görebilir. Firestore kuralları gizli profilleri (18 yaş altı /
+  /// veli onayı bekleyen / kendini gizleyen) oyunculara kapatır; sorgu da
+  /// bu yüzden filtrelenmelidir. Admin/moderatör için false.
+  bool publicOnly = false;
+
   // Getters
   ActorFilterModel get filter => _filter;
   List<ActorProfileModel> get results => _results;
   bool get isLoading => _isLoading;
   bool get hasMore => _hasMore;
   String? get errorMessage => _errorMessage;
+
+  bool? _isStaffCache;
+  String? _isStaffUid;
+
+  /// Oturumdaki kullanıcı admin/moderatör mü? (kullanıcı başına bir kez okunur)
+  Future<bool> _isStaff() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return false;
+    if (_isStaffUid == uid && _isStaffCache != null) return _isStaffCache!;
+    try {
+      final doc = await _firestore.collection(AppConstants.usersCollection).doc(uid).get();
+      _isStaffCache = ['admin', 'moderator'].contains(doc.data()?['role']);
+    } catch (_) {
+      _isStaffCache = false;
+    }
+    _isStaffUid = uid;
+    return _isStaffCache!;
+  }
 
   /// Filtreyi güncelle
   void updateFilter(ActorFilterModel newFilter) {
@@ -59,16 +84,28 @@ class ActorFilterProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      const limit = 200; // geniş çek, sıralama client-side
+      // Eskiden yalnızca ilk 200 oyuncu çekilip filtre bunların üzerinde
+      // uygulanıyordu; 200'ün dışında kalan uygun profiller (ör. 35 yaş /
+      // 185 cm) sonuçlarda hiç görünmüyordu. Artık tüm onaylı oyuncular
+      // sayfa sayfa çekilir ve filtre hepsine uygulanır.
+      const limit = 500;
 
       Query<Map<String, dynamic>> query = _firestore
           .collection(AppConstants.usersCollection)
-          .where('role', isEqualTo: 'actor');
+          .where('role', isEqualTo: 'actor')
+          // Yalnızca admin onaylı profiller — "onay bekleyen" / reddedilen
+          // kullanıcılar veri tabanı sorgusunda elenir.
+          .where('approvalStatus', isEqualTo: 'approved');
 
-      // ── ZORUNLU FİLTRELER (Firestore tarafı) ──
-      if (_filter.gender != null) {
-        query = query.where('gender', isEqualTo: _filter.gender!.value);
+      // Admin/moderatör dışındakiler yalnızca gizli olmayan profilleri
+      // listeleyebilir (Firestore kuralları); aksi halde permission-denied.
+      if (publicOnly || !await _isStaff()) {
+        query = query.where('isHidden', isEqualTo: false);
       }
+
+      // Cinsiyet artık client-side (matchesActorHard) kontrol edilir: eski
+      // kayıtlardaki 'Erkek' / 'Male' gibi yazımlar Firestore eşitlik
+      // sorgusunda kaçıyordu.
 
       if (_filter.onlyComplete) {
         query = query.where('isProfileComplete', isEqualTo: true);
@@ -76,36 +113,36 @@ class ActorFilterProvider extends ChangeNotifier {
 
       // Skills artık Firestore'da filtrelenmez — soft/bonus olarak client-side sıralanır
 
-      query = query.limit(limit);
-
-      if (loadMore && _lastDoc != null) {
-        query = query.startAfterDocument(_lastDoc!);
-      }
-
-      final snapshot = await query.get();
-
-      if (snapshot.docs.isEmpty) {
-        _hasMore = false;
-      } else {
-        _lastDoc = snapshot.docs.last;
-        if (snapshot.docs.length < limit) {
-          _hasMore = false;
+      // Tüm sayfaları sırayla çek (en fazla 20 × 500 = 10.000 oyuncu)
+      for (var page = 0; page < 20; page++) {
+        var pageQuery = query.limit(limit);
+        if (_lastDoc != null) {
+          pageQuery = pageQuery.startAfterDocument(_lastDoc!);
         }
 
-        final actors = snapshot.docs
-            .map((doc) => ActorProfileModel.fromMap(doc.data(), doc.id))
-            .toList();
+        final snapshot = await pageQuery.get();
+        if (snapshot.docs.isEmpty) break;
+        _lastDoc = snapshot.docs.last;
 
-        // Client-side zorunlu filtreler (yaş, boy, kilo, göz, saç, şehir, deneyim, isim)
-        final filtered = actors.where((actor) => _filter.matchesActorHard(actor)).toList();
-
-        // Tekilleştirerek ekle
-        for (final actor in filtered) {
+        for (final doc in snapshot.docs) {
+          ActorProfileModel actor;
+          try {
+            actor = ActorProfileModel.fromMap(doc.data(), doc.id);
+          } catch (e) {
+            // Tek bir bozuk kayıt tüm aramayı düşürmesin
+            debugPrint('⚠️ [ActorFilterProvider] Oyuncu atlandı (${doc.id}): $e');
+            continue;
+          }
+          // Client-side zorunlu filtreler (yaş, boy, kilo, göz, saç, şehir, deneyim, isim)
+          if (!actor.isApproved || !_filter.matchesActorHard(actor)) continue;
           if (!_results.any((a) => a.uid == actor.uid)) {
             _results.add(actor);
           }
         }
+
+        if (snapshot.docs.length < limit) break;
       }
+      _hasMore = false;
 
       // ── SIRALAMA ──
       // 1. Skill eşleşme sayısına göre (çok → az)

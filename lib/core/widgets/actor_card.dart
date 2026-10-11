@@ -15,6 +15,12 @@ class ActorCard extends StatelessWidget {
   final int matchedSkillCount; // skill badge sayısı (0 = badge yok)
   final VoidCallback? onTap;
 
+  /// true ise: isim "A***** Y*****" şeklinde maskelenir, yaş/şehir satırı
+  /// gösterilmez ve karta dokunma efekti kapatılır (yalnızca fotoğraf +
+  /// baş harfler görünsün, detaya girilemesin). Normal oyuncuların
+  /// birbirinin oyuncu havuzunu gezdiği ekranda kullanılır.
+  final bool maskName;
+
   const ActorCard({
     super.key,
     required this.actor,
@@ -22,6 +28,7 @@ class ActorCard extends StatelessWidget {
     this.showAdminInfo = false,
     this.matchedSkillCount = 0,
     this.onTap,
+    this.maskName = false,
   });
 
   @override
@@ -29,7 +36,9 @@ class ActorCard extends StatelessWidget {
     final hasSkillMatch = matchedSkillCount > 0;
 
     final card = GestureDetector(
-      onTap: onTap,
+      // maskName açıkken (normal oyuncular arasında gezinme) hangi onTap
+      // verilirse verilsin dokunma devre dışı — profil detayına girilemez.
+      onTap: maskName ? null : onTap,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -55,29 +64,32 @@ class ActorCard extends StatelessWidget {
             child: Column(
               children: [
                 // ── FOTO ALANI ──────────────────────────
+                // Fotoğraf kalan tüm alanı kaplar; yüz kırpılmasın diye üst
+                // kısma hizalanır. Tüm kartlarda aynı oran korunur.
                 Expanded(
-                  flex: 5,
                   child: ClipRRect(
                     borderRadius: const BorderRadius.only(
                       topLeft: Radius.circular(AppTheme.radiusMd),
                       topRight: Radius.circular(AppTheme.radiusMd),
                     ),
-                    child: _buildPhoto(),
+                    child: SizedBox.expand(child: _buildPhoto()),
                   ),
                 ),
 
                 // ── BİLGİ ALANI ─────────────────────────
-                Expanded(
-                  flex: 4,
+                // Sabit (içeriğe göre) yükseklik: büyük yazı tipi ayarlı
+                // cihazlarda bile taşma olmaz.
+                MediaQuery.withClampedTextScaling(
+                  maxScaleFactor: 1.1,
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        // İsim
+                        // İsim (maskName ise "A***** Y*****")
                         Text(
-                          actor.fullName,
+                          maskName ? _maskedName() : actor.fullName,
                           style: GoogleFonts.outfit(
                             fontSize: 13.5,
                             fontWeight: FontWeight.w700,
@@ -87,9 +99,11 @@ class ActorCard extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(height: 4),
-                        // Yaş · Şehir
-                        if (actor.age != null || actor.city != null)
+                        // Yaş · Şehir (maskName ise hiç gösterilmez — yalnızca
+                        // foto + baş harfler görünsün)
+                        if (!maskName &&
+                            (actor.age != null || actor.city != null)) ...[
+                          const SizedBox(height: 4),
                           _infoRow(
                             [
                               if (actor.age != null) '${actor.age} yaş',
@@ -97,6 +111,7 @@ class ActorCard extends StatelessWidget {
                             ],
                             color: AppTheme.textSecondary,
                           ),
+                        ],
                         // Boy · Cinsiyet (admin/mod)
                         if (showAdminInfo &&
                             (actor.heightCm != null || actor.gender != null)) ...[
@@ -165,6 +180,7 @@ class ActorCard extends StatelessWidget {
       return CachedNetworkImage(
         imageUrl: actor.profilePhotoUrl!,
         fit: BoxFit.cover,
+        alignment: Alignment.topCenter,
         width: double.infinity,
         height: double.infinity,
         placeholder: (context, url) => _avatarFallback(),
@@ -204,6 +220,19 @@ class ActorCard extends StatelessWidget {
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
     );
+  }
+
+  /// "Ahmet Yılmaz" → "A***** Y*****" — her kelimenin ilk harfi kalır,
+  /// geri kalanı (harf sayısı korunarak) yıldızlanır.
+  String _maskedName() {
+    final words = actor.fullName.trim().split(RegExp(r'\s+'));
+    if (words.isEmpty || (words.length == 1 && words.first.isEmpty)) {
+      return '***';
+    }
+    return words.where((w) => w.isNotEmpty).map((w) {
+      if (w.length <= 1) return w.toUpperCase();
+      return '${w[0].toUpperCase()}${'*' * (w.length - 1)}';
+    }).join(' ');
   }
 
   String _initials() {

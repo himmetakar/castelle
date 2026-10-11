@@ -96,17 +96,18 @@ class ProjectService {
       batch.delete(doc.reference);
     }
 
-    // 3. Projeye ait onaylanmış (approved) olmayan tüm audition'ları sil
+    // 3. Projeye ait audition'lar SİLİNMEZ: oyuncunun geçmişi ve yedek için
+    // korunur, sadece "proje silindi" olarak işaretlenir.
     final auditionsQuery = await _firestore
         .collection('auditions')
         .where('projectId', isEqualTo: projectId)
         .get();
 
     for (var doc in auditionsQuery.docs) {
-      final status = doc.data()['status'] as String?;
-      if (status != 'approved') {
-        batch.delete(doc.reference);
-      }
+      batch.update(doc.reference, {
+        'projectDeleted': true,
+        'projectDeletedAt': FieldValue.serverTimestamp(),
+      });
     }
 
     await batch.commit();
@@ -192,13 +193,20 @@ class ProjectService {
   }
 
   /// Aktif projeleri getir (Oyuncular ve Yönetmenler için) — Firestore (index gerektirmez)
-  Future<List<ProjectModel>> getActiveProjects({int limit = 30}) async {
+  ///
+  /// [publicOnly]: Oyuncular için true verilmelidir. "Gizli proje" olarak
+  /// işaretlenen projeler oyunculara listelenmez; yalnızca davet edilen
+  /// oyuncu (invitedActorIds) projeyi açabilir. Firestore kuralları da bunu
+  /// zorunlu kılar.
+  Future<List<ProjectModel>> getActiveProjects({int limit = 30, bool publicOnly = false}) async {
     try {
-      final snapshot = await _firestore
+      Query<Map<String, dynamic>> query = _firestore
           .collection(_collection)
-          .where('status', whereIn: ['active', 'casting'])
-          .limit(limit)
-          .get();
+          .where('status', whereIn: ['active', 'casting']);
+      if (publicOnly) {
+        query = query.where('isPrivate', isEqualTo: false);
+      }
+      final snapshot = await query.limit(limit).get();
 
       final list = snapshot.docs
           .map((doc) => ProjectModel.fromMap(doc.data(), doc.id))

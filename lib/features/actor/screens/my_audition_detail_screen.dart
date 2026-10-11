@@ -1,12 +1,12 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:castelle/core/widgets/web_frame.dart';
-import 'package:castelle/core/utils/platform_utils.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:chewie/chewie.dart';
-import 'package:video_player/video_player.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:castelle/core/theme/app_theme.dart';
 import 'package:castelle/core/models/audition_model.dart';
+import 'package:castelle/core/models/project_model.dart';
+import 'package:castelle/core/services/project_service.dart';
+import 'package:castelle/core/widgets/app_video_player.dart';
+import 'package:castelle/features/actor/screens/audition_submit_screen.dart';
 
 /// Castelle - Oyuncunun Kendi Audition Detayı
 /// "Başvurularım" listesinden bir audition'a tıklandığında açılır.
@@ -26,129 +26,79 @@ class MyAuditionDetailScreen extends StatefulWidget {
 }
 
 class _MyAuditionDetailScreenState extends State<MyAuditionDetailScreen> {
-  VideoPlayerController? _videoController;
-  ChewieController? _chewieController;
-  bool _isVideoLoading = true;
-  String? _videoError;
+  ProjectModel? _project;
+  bool _loadingProject = true;
 
   @override
   void initState() {
     super.initState();
-    _initVideo();
+    _loadProject();
   }
 
-  Future<void> _initVideo() async {
-    var videoUrl = widget.audition.videoUrl;
-
-    // Firebase Storage URL'sindeki slash karakterlerini %2F yapacak şekilde
-    // düzelt (eski kayıtlar için)
-    if (videoUrl.startsWith('http') && videoUrl.contains('/o/')) {
-      final oIndex = videoUrl.indexOf('/o/');
-      final queryIndex = videoUrl.indexOf('?', oIndex);
-      final baseUrl = videoUrl.substring(0, oIndex + 3);
-      final queryParams =
-          queryIndex != -1 ? videoUrl.substring(queryIndex) : '';
-      final rawPath = queryIndex != -1
-          ? videoUrl.substring(oIndex + 3, queryIndex)
-          : videoUrl.substring(oIndex + 3);
-
-      if (rawPath.contains('/') && !rawPath.contains('%2F')) {
-        final encodedPath = Uri.encodeComponent(rawPath);
-        videoUrl = '$baseUrl$encodedPath$queryParams';
-      }
-    }
-
-    if (videoUrl.isEmpty) {
-      if (!mounted) return;
-      setState(() {
-        _isVideoLoading = false;
-        _videoError = 'Video URL bulunamadı. Audition kaydında video bilgisi eksik.';
-      });
-      return;
-    }
-
-    // Web'de dart:io dosya erişimi yok; yerel yollar orada oynatılamaz
-    final isLocalFile = !kIsWeb &&
-        (videoUrl.startsWith('/') ||
-            videoUrl.startsWith('file://') ||
-            videoUrl.contains('/data/') ||
-            videoUrl.contains('/storage/'));
-
+  Future<void> _loadProject() async {
     try {
-      if (isLocalFile) {
-        final cleanPath = videoUrl.replaceFirst(RegExp(r'^file://'), '');
-        final file = File(cleanPath);
-        final exists = await file.exists();
+      final p = await ProjectService().getProject(widget.audition.projectId);
+      if (mounted) setState(() => _project = p);
+    } catch (_) {}
+    if (mounted) setState(() => _loadingProject = false);
+  }
 
-        if (!exists) {
-          if (!mounted) return;
-          setState(() {
-            _isVideoLoading = false;
-            _videoError =
-                'Video dosyası cihazda bulunamadı.\n\nDosya adı: ${cleanPath.split('/').last}';
-          });
-          return;
-        }
+  ProjectRole? get _role {
+    final p = _project;
+    if (p == null) return null;
+    for (final r in p.roles) {
+      if (r.roleName.trim() == widget.audition.roleName.trim()) return r;
+    }
+    return null;
+  }
 
-        try {
-          _videoController = VideoPlayerController.file(file);
-          await _videoController!.initialize();
-        } catch (_) {
-          _videoController?.dispose();
-          _videoController = VideoPlayerController.networkUrl(Uri.file(cleanPath));
-          await _videoController!.initialize();
-        }
-      } else if (videoUrl.startsWith('http')) {
-        _videoController = VideoPlayerController.networkUrl(Uri.parse(videoUrl));
-        await _videoController!.initialize();
-      } else {
-        if (!mounted) return;
-        setState(() {
-          _isVideoLoading = false;
-          _videoError = 'Geçersiz video adresi:\n$videoUrl';
-        });
-        return;
-      }
-    } catch (e) {
-      _videoController?.dispose();
-      _videoController = null;
-      if (!mounted) return;
-      setState(() {
-        _isVideoLoading = false;
-        _videoError = 'Video oynatılamadı.\n\nHata: $e';
-      });
+  Future<void> _openRevisionUpload() async {
+    final project = _project ?? await ProjectService().getProject(widget.audition.projectId);
+    if (!mounted) return;
+    if (project == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Proje bulunamadı.'), backgroundColor: AppTheme.error),
+      );
       return;
     }
+    final role = _role ?? ProjectRole(roleName: widget.audition.roleName);
 
-    _chewieController = ChewieController(
-      videoPlayerController: _videoController!,
-      autoPlay: false,
-      looping: false,
-      aspectRatio: _videoController!.value.aspectRatio,
-      allowFullScreen: true,
-      placeholder: Container(
-        color: AppTheme.surfaceLight,
-        child: const Center(
-          child: CircularProgressIndicator(color: AppTheme.accent),
-        ),
-      ),
-      materialProgressColors: ChewieProgressColors(
-        playedColor: AppTheme.accent,
-        handleColor: AppTheme.accent,
-        backgroundColor: AppTheme.surfaceElevated,
-        bufferedColor: AppTheme.primary.withValues(alpha: 0.3),
-      ),
-    );
+    // Bu karaktere gönderilmiş davetteki özel senaryo varsa onu kullan
+    String? script;
+    bool budgetFlexible = false;
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('notifications')
+          .where('recipientId', isEqualTo: widget.audition.actorId)
+          .where('projectId', isEqualTo: widget.audition.projectId)
+          .where('type', isEqualTo: 'casting_invite')
+          .get();
+      for (final doc in snap.docs) {
+        final data = doc.data()['data'] as Map<String, dynamic>?;
+        if ((data?['roleName'] as String?)?.trim() == widget.audition.roleName.trim()) {
+          script = data?['auditionScript'] as String?;
+          budgetFlexible = data?['budgetFlexible'] as bool? ?? false;
+        }
+      }
+    } catch (_) {}
+    script = (script != null && script.trim().isNotEmpty)
+        ? script
+        : (widget.audition.scriptUsed ?? role.auditionScript);
 
     if (!mounted) return;
-    setState(() => _isVideoLoading = false);
-  }
-
-  @override
-  void dispose() {
-    _chewieController?.dispose();
-    _videoController?.dispose();
-    super.dispose();
+    final sent = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AuditionSubmitScreen(
+          project: project,
+          role: role,
+          customScript: script,
+          budgetFlexible: budgetFlexible,
+          revisionOf: widget.audition,
+        ),
+      ),
+    );
+    if (sent == true && mounted) Navigator.pop(context);
   }
 
   Color _statusColor(AuditionStatus status) {
@@ -164,24 +114,9 @@ class _MyAuditionDetailScreenState extends State<MyAuditionDetailScreen> {
   }
 
   Widget _buildStatusChip(AuditionModel audition) {
-    String label = audition.status.displayName;
-    Color color = _statusColor(audition.status);
-
-    if (audition.status == AuditionStatus.options) {
-      if (audition.optionAvailable == null) {
-        label = '🟡 Cevap Bekleniyor';
-        color = AppTheme.warning;
-      } else if (audition.optionAvailable == true) {
-        label = '🟢 Opsiyonda';
-        color = AppTheme.success;
-      } else {
-        label = '🔴 Müsait Değil';
-        color = AppTheme.error;
-      }
-    } else if (audition.status == AuditionStatus.approved) {
-      label = '🔵 Kesinleşti';
-      color = Colors.blue;
-    }
+    final group = audition.status.displayGroup;
+    final label = group.displayName;
+    final color = _statusColor(group);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -216,104 +151,159 @@ class _MyAuditionDetailScreenState extends State<MyAuditionDetailScreen> {
   }
 
   Widget _buildVideoPlayer() {
-    if (_isVideoLoading) {
-      return AspectRatio(
-        aspectRatio: 16 / 9,
-        child: Container(
-          color: AppTheme.surfaceLight,
-          child: const Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                CircularProgressIndicator(color: AppTheme.accent),
-                SizedBox(height: 12),
-                Text('Video yükleniyor...',
-                    style: TextStyle(color: AppTheme.textTertiary)),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
-    if (_videoError != null) {
+    final url = widget.audition.videoUrl;
+    if (url.isEmpty) {
       return Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+        padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
           color: AppTheme.surfaceLight,
           borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-          border: Border.all(color: AppTheme.error.withValues(alpha: 0.2)),
         ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(
-                color: AppTheme.error.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.videocam_off,
-                  size: 32, color: AppTheme.error),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Video Oynatma Hatası',
-              style: GoogleFonts.outfit(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.error,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _videoError!,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.inter(
-                fontSize: 13,
-                color: AppTheme.textSecondary,
-                height: 1.4,
-              ),
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              height: 40,
-              child: OutlinedButton.icon(
-                onPressed: () {
-                  setState(() {
-                    _isVideoLoading = true;
-                    _videoError = null;
-                  });
-                  _videoController?.dispose();
-                  _videoController = null;
-                  _chewieController?.dispose();
-                  _chewieController = null;
-                  _initVideo();
-                },
-                icon: const Icon(Icons.refresh, size: 18),
-                label: Text('Tekrar Dene', style: GoogleFonts.inter(fontSize: 13)),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppTheme.accent,
-                  side: const BorderSide(color: AppTheme.accent),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-              ),
-            ),
-          ],
+        child: Text(
+          'Bu başvurunun videosu artık saklanmıyor.',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textSecondary),
         ),
       );
     }
+    return AppVideoPlayer(
+      key: ValueKey(url),
+      videoUrl: url,
+      autoInit: true,
+      maxHeight: 480,
+    );
+  }
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-      child: AspectRatio(
-        aspectRatio: _videoController!.value.aspectRatio,
-        child: Chewie(controller: _chewieController!),
+  Widget _buildRevisionCard(AuditionModel audition) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.accent.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        border: Border.all(color: AppTheme.accent.withValues(alpha: 0.4), width: 1.2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.replay_circle_filled_outlined, color: AppTheme.accent),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Revize İstendi · ${audition.projectTitle}',
+                  style: GoogleFonts.outfit(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.accent,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            (audition.reviewerNote?.trim().isNotEmpty ?? false)
+                ? '“${audition.reviewerNote!.trim()}”'
+                : 'Videonuzu tekrar çekmeniz istendi.',
+            style: GoogleFonts.inter(fontSize: 14, color: AppTheme.textPrimary, height: 1.45),
+          ),
+          if (audition.reviewerName?.isNotEmpty ?? false) ...[
+            const SizedBox(height: 4),
+            Text(
+              '— ${audition.reviewerName}',
+              style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textTertiary),
+            ),
+          ],
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            height: 46,
+            child: ElevatedButton.icon(
+              onPressed: _openRevisionUpload,
+              icon: const Icon(Icons.videocam_outlined),
+              label: Text(
+                'Yeni Videoyu Çek / Yükle',
+                style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.accent,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProjectInfoCard() {
+    if (_loadingProject) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: Center(child: CircularProgressIndicator(color: AppTheme.accent)),
+      );
+    }
+    final p = _project;
+    if (p == null) return const SizedBox.shrink();
+    final role = _role;
+    final budget = role?.budget != null && role!.budget! > 0
+        ? ProjectModel.formatTl(role.budget!)
+        : p.budgetLabel;
+    final hasCoordinator = p.coordinatorName?.trim().isNotEmpty ?? false;
+
+    Widget row(IconData icon, String label, String value) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 5),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon, size: 16, color: AppTheme.textTertiary),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 104,
+                child: Text(label,
+                    style: GoogleFonts.inter(fontSize: 12.5, color: AppTheme.textTertiary)),
+              ),
+              Expanded(
+                child: Text(value,
+                    style: GoogleFonts.inter(
+                        fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+              ),
+            ],
+          ),
+        );
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceCard,
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        border: Border.all(color: AppTheme.border, width: 0.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Proje Bilgileri',
+            style: GoogleFonts.outfit(
+                fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
+          ),
+          const SizedBox(height: 6),
+          row(Icons.theater_comedy_outlined, 'Karakter', widget.audition.roleName),
+          row(Icons.payments_outlined, 'Bütçe', budget ?? 'Belirtilmedi'),
+          row(Icons.support_agent, 'Proje Sorumlusu',
+              hasCoordinator ? p.coordinatorName! : 'Atanmadı'),
+          if (p.coordinatorPhone?.trim().isNotEmpty ?? false)
+            row(Icons.phone_outlined, 'Telefon', p.coordinatorPhone!),
+          if (p.shootDate?.trim().isNotEmpty ?? false)
+            row(Icons.event_outlined, 'Çekim Tarihi', p.shootDate!),
+        ],
       ),
     );
   }
@@ -424,7 +414,11 @@ class _MyAuditionDetailScreenState extends State<MyAuditionDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            MaxWidthBox(maxWidth: 640, child: _buildVideoPlayer()),
+            if (audition.status == AuditionStatus.revision) ...[
+              _buildRevisionCard(audition),
+              const SizedBox(height: 16),
+            ],
+            _buildVideoPlayer(),
             const SizedBox(height: 16),
             Container(
               width: double.infinity,
@@ -536,8 +530,16 @@ class _MyAuditionDetailScreenState extends State<MyAuditionDetailScreen> {
                       ),
                     ),
                   ],
-                  if (audition.status == AuditionStatus.options)
+                  if (audition.status == AuditionStatus.options &&
+                      audition.optionAvailable != null)
                     _buildOptionResponseDetails(audition),
+                  if (audition.revisionCount > 0) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      'Bu başvuru ${audition.revisionCount} kez revize edildi.',
+                      style: GoogleFonts.inter(fontSize: 11.5, color: AppTheme.textTertiary),
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   Text(
                     'Gönderim: ${_formatDate(audition.createdAt)}',
@@ -546,6 +548,9 @@ class _MyAuditionDetailScreenState extends State<MyAuditionDetailScreen> {
                 ],
               ),
             ),
+            const SizedBox(height: 16),
+            _buildProjectInfoCard(),
+            const SizedBox(height: 24),
           ],
         ),
       ),

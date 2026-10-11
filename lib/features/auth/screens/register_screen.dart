@@ -183,6 +183,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
       isUnder18: _isOver18 == false,
       guardianName: _isOver18 == false ? _guardianNameController.text.trim() : null,
       guardianPhone: _isOver18 == false ? _guardianPhoneController.text.trim() : null,
+      // KVKK: Hangi metinlerin onaylandığı ve isteğe bağlı pazarlama
+      // rızasının verilip verilmediği ispat için kaydedilir.
+      consents: {
+        'kvkkAydinlatma': _acceptedKvkk,
+        'termsAndPrivacy': _acceptedTermsAndPrivacy,
+        'dataProcessing': _acceptedDataProcessing,
+        'profileSharing': _acceptedProfileSharing,
+        'auditionSharing': _acceptedAuditionSharing,
+        'marketingUse': _acceptedMarketingUse,
+      },
     );
     if (mounted) setState(() => _isEmailLoading = false);
 
@@ -817,7 +827,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                   obscureText: _obscurePassword,
                                   decoration: InputDecoration(
                                     labelText: 'Şifre',
-                                    hintText: 'En az 6 karakter',
+                                    hintText: 'En az 8 karakter, harf ve rakam',
                                     prefixIcon: const Icon(Icons.lock_outline),
                                     suffixIcon: IconButton(
                                       icon: Icon(
@@ -830,8 +840,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                     if (value == null || value.isEmpty) {
                                       return 'Lütfen bir şifre belirleyin.';
                                     }
-                                    if (value.length < 6) {
-                                      return 'Şifre en az 6 karakter olmalıdır.';
+                                    if (value.length < AppConstants.minPasswordLength) {
+                                      return 'Şifre en az ${AppConstants.minPasswordLength} karakter olmalıdır.';
+                                    }
+                                    // Kişisel verilerin korunması için zayıf şifreler kabul edilmez
+                                    if (!RegExp(r'[A-Za-zÇĞİÖŞÜçğıöşü]').hasMatch(value) ||
+                                        !RegExp(r'[0-9]').hasMatch(value)) {
+                                      return 'Şifre en az bir harf ve bir rakam içermelidir.';
                                     }
                                     return null;
                                   },

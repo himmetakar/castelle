@@ -41,7 +41,7 @@ class AppConstants {
   static const int actorListPageSize = 30;
 
   // Validation
-  static const int minPasswordLength = 6;
+  static const int minPasswordLength = 8;
   static const int maxBioLength = 500;
   static const int maxSkillsCount = 50;
   static const int minAge = 4;

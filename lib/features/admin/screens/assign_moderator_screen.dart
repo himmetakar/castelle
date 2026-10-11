@@ -42,6 +42,22 @@ class _AssignModeratorScreenState extends State<AssignModeratorScreen> {
 
   String _approvalMode = 'neutral';
 
+  /// E-posta/telefon private alt dokümanda (KVKK) — admin için bir kez okunur.
+  Map<String, Map<String, dynamic>> _privateByUid = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _firestore.collectionGroup(AppConstants.privateCollection).get().then((snap) {
+      final map = <String, Map<String, dynamic>>{};
+      for (final doc in snap.docs) {
+        final uid = doc.reference.parent.parent?.id;
+        if (uid != null) map[uid] = doc.data();
+      }
+      if (mounted) setState(() => _privateByUid = map);
+    }).catchError((_) {});
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -93,11 +109,11 @@ class _AssignModeratorScreenState extends State<AssignModeratorScreen> {
 
       final Map<String, UserModel> merged = {};
       for (var doc in snapCapitalized.docs) {
-        final u = UserModel.fromMap(doc.data(), doc.id);
+        final u = UserModel.fromMap({...doc.data(), ..._privateByUid[doc.id] ?? const {}}, doc.id);
         merged[u.uid] = u;
       }
       for (var doc in snapRaw.docs) {
-        final u = UserModel.fromMap(doc.data(), doc.id);
+        final u = UserModel.fromMap({...doc.data(), ..._privateByUid[doc.id] ?? const {}}, doc.id);
         merged[u.uid] = u;
       }
 
@@ -895,7 +911,7 @@ class _AssignModeratorScreenState extends State<AssignModeratorScreen> {
                   separatorBuilder: (_, _) => const SizedBox(height: 10),
                   itemBuilder: (context, index) {
                     final doc = docs[index];
-                    final user = UserModel.fromMap(doc.data(), doc.id);
+                    final user = UserModel.fromMap({...doc.data(), ..._privateByUid[doc.id] ?? const {}}, doc.id);
 
                     return Container(
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),

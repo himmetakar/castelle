@@ -1,8 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'package:castelle/core/utils/platform_utils.dart';
+import 'package:castelle/core/utils/media_upload.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -21,9 +20,10 @@ import 'package:castelle/core/services/project_service.dart';
 import 'package:castelle/features/actor/screens/audition_submit_screen.dart';
 import 'package:castelle/features/actor/screens/my_audition_detail_screen.dart';
 import 'package:castelle/features/actor/providers/audition_provider.dart';
+import 'package:castelle/core/utils/platform_utils.dart';
 
 /// Castelle - Oyuncu Audition Geçmişi Ekranı
-/// 6 tab: İşlem Bekliyor | Gönderildi | İnceleniyor | Onaylandı | Reddedildi | Revizyon
+/// 5 tab: Gönderildi | Opsiyon | Onaylandı | Reddedildi | Revizyon
 /// Gerçek zamanlı Firestore stream — admin müdahalesi gerekmez
 
 class AuditionHistoryScreen extends StatefulWidget {
@@ -49,39 +49,26 @@ class _AuditionHistoryScreenState extends State<AuditionHistoryScreen>
   bool _loading = true;
   bool _hasProcessedHighlight = false;
 
-  // Tab sırası ve etiketleri
-  static const _tabLabels = [
-    'İşlem Bekliyor', // submitted
-    'Gönderildi',     // submitted→reviewing geçiş öncesi
-    'İnceleniyor',    // reviewing
-    'Opsiyon',        // options
-    'Onaylandı',      // approved
-    'Reddedildi',     // rejected
-    'Revizyon',       // revision
-  ];
+  // Sadece 5 durum: Gönderildi · Opsiyon · Onaylandı · Reddedildi · Revizyon
+  // ("İnceleniyor" gibi ara durumlar "Gönderildi" altında gösterilir.)
+  static const _tabStatuses = AuditionStatus.visibleStatuses;
+  static final _tabLabels = _tabStatuses.map((s) => s.displayName).toList();
 
-
-  // Tab indexine göre gerçek status
-  static AuditionStatus _statusForTab(int i) {
-    switch (i) {
-      case 0: return AuditionStatus.submitted;
-      case 1: return AuditionStatus.submitted;
-      case 2: return AuditionStatus.reviewing;
-      case 3: return AuditionStatus.options;
-      case 4: return AuditionStatus.approved;
-      case 5: return AuditionStatus.rejected;
-      case 6: return AuditionStatus.revision;
-      default: return AuditionStatus.submitted;
-    }
-  }
+  // Tab indexine göre gösterilen ana durum
+  static AuditionStatus _statusForTab(int i) =>
+      (i >= 0 && i < _tabStatuses.length) ? _tabStatuses[i] : AuditionStatus.submitted;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(
-      length: 7,
+      length: _tabStatuses.length,
       vsync: this,
-      initialIndex: widget.initialTabIndex ?? 0,
+      initialIndex: (widget.initialTabIndex ?? 0) < 0
+          ? 0
+          : ((widget.initialTabIndex ?? 0) >= _tabStatuses.length
+              ? _tabStatuses.length - 1
+              : (widget.initialTabIndex ?? 0)),
     );
     _tabController.addListener(_handleTabChanged);
 
@@ -149,7 +136,7 @@ class _AuditionHistoryScreenState extends State<AuditionHistoryScreen>
       final audition = _auditions
           .where((a) => a.projectId == n.projectId)
           .firstOrNull;
-      if (audition?.status == targetStatus) {
+      if (audition?.status.displayGroup == targetStatus) {
         notifProvider.markAsRead(n.id);
       }
     }
@@ -164,8 +151,8 @@ class _AuditionHistoryScreenState extends State<AuditionHistoryScreen>
   }
 
   // Statuse göre filtreleme
-  List<AuditionModel> _filtered(AuditionStatus status) =>
-      _auditions.where((a) => a.status == status).toList();
+  List<AuditionModel> _filtered(AuditionStatus group) =>
+      _auditions.where((a) => a.status.displayGroup == group).toList();
 
   // Unread badge count per tab
   int _badgeCount(int tabIndex) {
@@ -177,7 +164,7 @@ class _AuditionHistoryScreenState extends State<AuditionHistoryScreen>
     final targetStatus = _statusForTab(tabIndex);
     return unreadNotifs.where((n) {
       final audition = _auditions.where((a) => a.projectId == n.projectId).firstOrNull;
-      return audition?.status == targetStatus;
+      return audition?.status.displayGroup == targetStatus;
     }).length;
   }
 
@@ -237,7 +224,7 @@ class _AuditionHistoryScreenState extends State<AuditionHistoryScreen>
               GoogleFonts.inter(fontWeight: FontWeight.w400, fontSize: 13),
           tabAlignment: TabAlignment.start,
           tabs: List.generate(
-            7,
+            _tabStatuses.length,
             (i) => _buildTabItem(_tabLabels[i], i),
           ),
         ),
@@ -246,15 +233,9 @@ class _AuditionHistoryScreenState extends State<AuditionHistoryScreen>
           ? const Center(child: CircularProgressIndicator(color: AppTheme.accent))
           : TabBarView(
               controller: _tabController,
-              children: [
-                _buildList(_filtered(AuditionStatus.submitted), AuditionStatus.submitted),
-                _buildList(_filtered(AuditionStatus.submitted), AuditionStatus.submitted), // Gönderildi = submitted
-                _buildList(_filtered(AuditionStatus.reviewing), AuditionStatus.reviewing),
-                _buildList(_filtered(AuditionStatus.options), AuditionStatus.options),
-                _buildList(_filtered(AuditionStatus.approved), AuditionStatus.approved),
-                _buildList(_filtered(AuditionStatus.rejected), AuditionStatus.rejected),
-                _buildList(_filtered(AuditionStatus.revision), AuditionStatus.revision),
-              ],
+              children: _tabStatuses
+                  .map((group) => _buildList(_filtered(group), group))
+                  .toList(),
             ),
     );
   }
@@ -292,7 +273,7 @@ class _AuditionHistoryScreenState extends State<AuditionHistoryScreen>
     };
 
     final label = switch (status) {
-      AuditionStatus.submitted => 'Bekleyen başvuru yok',
+      AuditionStatus.submitted => 'Gönderilen başvuru yok',
       AuditionStatus.reviewing => 'İncelemede başvuru yok',
       AuditionStatus.options => 'Opsiyonlu başvuru yok',
       AuditionStatus.approved => 'Onaylanan başvuru yok',
@@ -460,7 +441,7 @@ class _AuditionHistoryScreenState extends State<AuditionHistoryScreen>
                           size: 14, color: _statusColor(audition.status)),
                       const SizedBox(width: 6),
                       Text(
-                        'Geri Bildirim${audition.reviewerName != null ? " — ${audition.reviewerName}" : ""}',
+                        '${isRevision ? "Revize Notu" : "Geri Bildirim"}${audition.reviewerName != null ? " — ${audition.reviewerName}" : ""}',
                         style: GoogleFonts.inter(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
@@ -500,7 +481,7 @@ class _AuditionHistoryScreenState extends State<AuditionHistoryScreen>
                 ),
                 icon: const Icon(Icons.send_rounded, size: 16),
                 label: Text(
-                  'Yeniden Audition Gönder',
+                  'Revize Videoyu Yükle',
                   style: GoogleFonts.outfit(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
@@ -659,14 +640,12 @@ class _AuditionHistoryScreenState extends State<AuditionHistoryScreen>
   Future<void> _downloadVideo(AuditionModel audition) async {
     final messenger = ScaffoldMessenger.of(context);
 
-    // Web'de dosya sistemi yok: videoyu yeni sekmede aç, tarayıcı indirsin
+    // Web: klasöre kaydetme desteklenmez, videoyu yeni sekmede aç.
     if (kIsWeb) {
-      final uri = Uri.tryParse(audition.videoUrl);
-      if (uri != null && audition.videoUrl.startsWith('http')) {
-        await launchUrl(uri, webOnlyWindowName: '_blank');
-      } else {
+      final opened = await MediaUpload.openInBrowser(audition.videoUrl);
+      if (!opened) {
         messenger.showSnackBar(
-          const SnackBar(content: Text('Bu video web üzerinden indirilemiyor.')),
+          const SnackBar(content: Text('Video açılamadı.'), backgroundColor: AppTheme.error),
         );
       }
       return;
@@ -828,6 +807,7 @@ class _AuditionHistoryScreenState extends State<AuditionHistoryScreen>
           : ProjectRole(roleName: audition.roleName);
 
       bool isBudgetFlexible = false;
+      String? roleScript;
       try {
         final currentUserUid = audition.actorId;
         final notifSnap = await FirebaseFirestore.instance
@@ -842,6 +822,8 @@ class _AuditionHistoryScreenState extends State<AuditionHistoryScreen>
             final roleData = data['data'] as Map<String, dynamic>?;
             if (roleData?['roleName'] == audition.roleName) {
               isBudgetFlexible = roleData?['budgetFlexible'] as bool? ?? false;
+              final sc = (roleData?['auditionScript'] as String?)?.trim();
+              if (sc != null && sc.isNotEmpty) roleScript = sc;
               break;
             }
           }
@@ -858,6 +840,10 @@ class _AuditionHistoryScreenState extends State<AuditionHistoryScreen>
             project: project,
             role: role,
             budgetFlexible: isBudgetFlexible,
+            // Karaktere özel senaryo (davet metni > önceki çekim > rol metni)
+            customScript: roleScript ?? audition.scriptUsed,
+            // Aynı başvuru güncellenir, eski video yedeklenir
+            revisionOf: audition,
           ),
         ),
       );
@@ -875,24 +861,10 @@ class _AuditionHistoryScreenState extends State<AuditionHistoryScreen>
   }
 
   Widget _buildStatusChip(AuditionModel audition) {
-    String label = audition.status.displayName;
-    Color color = _statusColor(audition.status);
-
-    if (audition.status == AuditionStatus.options) {
-      if (audition.optionAvailable == null) {
-        label = '🟡 Cevap Bekleniyor';
-        color = AppTheme.warning;
-      } else if (audition.optionAvailable == true) {
-        label = '🟢 Opsiyonda';
-        color = AppTheme.success;
-      } else {
-        label = '🔴 Müsait Değil';
-        color = AppTheme.error;
-      }
-    } else if (audition.status == AuditionStatus.approved) {
-      label = '🔵 Kesinleşti';
-      color = Colors.blue;
-    }
+    // Sadece 5 ana durum etiketi gösterilir
+    final group = audition.status.displayGroup;
+    final label = group.displayName;
+    final color = _statusColor(group);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),

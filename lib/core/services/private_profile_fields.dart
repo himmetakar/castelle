@@ -11,11 +11,24 @@ import 'package:castelle/core/constants/app_constants.dart';
 ///
 /// Modeller değişmedi — ayrıştırma yalnızca Firestore sınırında yapılır.
 
+///
+/// KVKK: Diğer oyuncuların görebildiği kök dokümanda kişiyi doğrudan
+/// tanımlayan / iletişime geçmeye yarayan veriler bulunmaz. E-posta, doğum
+/// tarihi, veli adı, acil durum telefonu ve kurtarma e-postası da bu nedenle
+/// private alt dokümana taşındı. Eski kayıtlar kullanıcı giriş yaptığında
+/// otomatik taşınır; tümünü bir kerede taşımak için
+/// functions/scripts/migrate_private_fields.js betiği kullanılabilir.
 const List<String> kPrivateProfileFields = [
   'phone',
   'guardianPhone',
   'bankIban',
   'bankAccountHolder',
+  'email',
+  'birthDate',
+  'guardianName',
+  'emergencyPhone',
+  'recoveryEmail',
+  'consents', // KVKK onay/rıza kayıtları
 ];
 
 DocumentReference<Map<String, dynamic>> privateProfileRef(

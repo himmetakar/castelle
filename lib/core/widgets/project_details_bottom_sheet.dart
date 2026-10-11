@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:castelle/core/widgets/web_frame.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:castelle/core/theme/app_theme.dart';
+import 'package:castelle/core/widgets/app_video_player.dart';
 import 'package:castelle/core/models/project_model.dart';
 import 'package:castelle/core/models/notification_model.dart';
 import 'package:castelle/features/actor/screens/audition_submit_screen.dart';
-import 'package:video_player/video_player.dart';
+import 'package:castelle/core/providers/auth_provider.dart';
+import 'package:castelle/core/providers/notification_provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:provider/provider.dart';
 
 /// Castelle - Proje Detayları Alt Sayfası (Bottom Sheet)
 /// Oyuncunun audition talebini veya proje detaylarını incelediği ekran.
@@ -39,9 +42,15 @@ class ProjectDetailsBottomSheet extends StatefulWidget {
           maxChildSize: 0.95,
           expand: false,
           builder: (context, scrollController) {
-            return ProjectDetailsBottomSheet(
-              project: project,
-              invite: invite,
+            // Telefonun yazı boyutu ayarı çok büyükse satırlar farklı
+            // cihazlarda alt alta kırılıyordu; ölçek makul aralıkta tutulur.
+            return MediaQuery.withClampedTextScaling(
+              minScaleFactor: 0.9,
+              maxScaleFactor: 1.1,
+              child: ProjectDetailsBottomSheet(
+                project: project,
+                invite: invite,
+              ),
             );
           },
         );
@@ -54,13 +63,123 @@ class ProjectDetailsBottomSheet extends StatefulWidget {
 }
 
 class _ProjectDetailsBottomSheetState extends State<ProjectDetailsBottomSheet> {
-  ProjectModel get project => widget.project;
+  /// Açılışta Firestore'dan tazelenen proje — liste/bildirimdeki eski kopya
+  /// yerine güncel veriyi (ör. sonradan atanan Proje Sorumlusu) gösterir.
+  ProjectModel? _freshProject;
+  ProjectModel get project => _freshProject ?? widget.project;
+
+  Future<void> _refreshProject() async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('projects')
+          .doc(widget.project.id)
+          .get();
+      if (!doc.exists || doc.data() == null || !mounted) return;
+      setState(() => _freshProject = ProjectModel.fromMap(doc.data()!, doc.id));
+    } catch (e) {
+      debugPrint('⚠️ [ProjectDetailsBottomSheet] Proje tazelenemedi: $e');
+    }
+  }
   NotificationModel? get invite => widget.invite;
 
   // Arka plan sesi önizleme
   AudioPlayer? _previewPlayer;
   bool _isAudioPlaying = false;
   bool _isAudioLoading = false;
+
+  /// Bu oyuncuya bu projede gönderilmiş audition talepleri (rol adı → davet).
+  /// Birden fazla karakterli projelerde oyuncu yalnızca KENDİ karakterini ve
+  /// o karaktere ait senaryoyu görür.
+  final Map<String, NotificationModel> _invitesByRole = {};
+  bool _hasRoleLessInvite = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshProject();
+    _collectInvites();
+  }
+
+  void _addInvite(NotificationModel n) {
+    final roleName = (n.data?['roleName'] as String?)?.trim();
+    if (roleName == null || roleName.isEmpty) {
+      _hasRoleLessInvite = true;
+      return;
+    }
+    final existing = _invitesByRole[roleName];
+    // Aynı rol için birden fazla davet varsa en yenisi geçerli
+    if (existing == null || n.createdAt.isAfter(existing.createdAt)) {
+      _invitesByRole[roleName] = n;
+    }
+  }
+
+  Future<void> _collectInvites() async {
+    if (invite != null) _addInvite(invite!);
+
+    try {
+      final notifs = context.read<NotificationProvider>().notifications;
+      for (final n in notifs) {
+        if (n.type == NotificationType.castingInvite && n.projectId == project.id) {
+          _addInvite(n);
+        }
+      }
+    } catch (_) {}
+
+    // Bildirim listesi sınırlı olabilir; Firestore'dan da kontrol et
+    try {
+      final uid = context.read<AuthProvider>().user?.uid;
+      if (uid != null) {
+        final snap = await FirebaseFirestore.instance
+            .collection('notifications')
+            .where('recipientId', isEqualTo: uid)
+            .where('projectId', isEqualTo: project.id)
+            .where('type', isEqualTo: NotificationType.castingInvite.value)
+            .get();
+        for (final doc in snap.docs) {
+          try {
+            _addInvite(NotificationModel.fromMap(doc.data(), doc.id));
+          } catch (_) {}
+        }
+      }
+    } catch (e) {
+      debugPrint('⚠️ [ProjectDetailsBottomSheet] Davetler okunamadı: $e');
+    }
+    if (mounted) setState(() {});
+  }
+
+  /// Oyuncunun görebileceği roller: davet edildiği karakterler.
+  /// Rol bilgisi olmayan eski davetlerde veya davet yoksa tüm roller.
+  List<ProjectRole> get _myRoles {
+    if (_invitesByRole.isEmpty) return project.roles;
+    final mine = project.roles
+        .where((r) => _invitesByRole.containsKey(r.roleName.trim()))
+        .toList();
+    if (mine.isEmpty) return project.roles;
+    if (_hasRoleLessInvite) return project.roles;
+    return mine;
+  }
+
+  /// Rol için gösterilecek/çekilecek senaryo: önce o role ait davetteki
+  /// özel metin, yoksa rolün kendi audition metni.
+  String? _scriptForRole(ProjectRole role) {
+    final inviteScript =
+        (_invitesByRole[role.roleName.trim()]?.data?['auditionScript'] as String?)?.trim();
+    if (inviteScript != null && inviteScript.isNotEmpty) return inviteScript;
+    final roleScript = role.auditionScript?.trim();
+    return (roleScript == null || roleScript.isEmpty) ? null : roleScript;
+  }
+
+  bool _budgetFlexibleForRole(ProjectRole role) =>
+      _invitesByRole[role.roleName.trim()]?.data?['budgetFlexible'] as bool? ??
+      (invite?.data?['budgetFlexible'] as bool? ?? false);
+
+  String? get _budgetText {
+    final roles = _myRoles;
+    if (roles.length == 1 && roles.first.budget != null && roles.first.budget! > 0) {
+      return ProjectModel.formatTl(roles.first.budget!);
+    }
+    return project.budgetLabel;
+  }
 
   @override
   void dispose() {
@@ -236,7 +355,8 @@ class _ProjectDetailsBottomSheetState extends State<ProjectDetailsBottomSheet> {
   }
 
   void _onSendeCastellePressed(BuildContext context) {
-    if (project.roles.isEmpty) {
+    final roles = _myRoles;
+    if (roles.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Bu projede başvurulacak rol bulunmuyor.'),
@@ -246,26 +366,32 @@ class _ProjectDetailsBottomSheetState extends State<ProjectDetailsBottomSheet> {
       return;
     }
 
-    if (project.roles.length == 1) {
-      Navigator.pop(context); // Close details sheet
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => AuditionSubmitScreen(
-            project: project,
-            role: project.roles.first,
-            customScript: invite?.data?['auditionScript'],
-            budgetFlexible: invite?.data?['budgetFlexible'] as bool? ?? false,
-          ),
-        ),
-      );
+    if (roles.length == 1) {
+      final navigator = Navigator.of(context);
+      final role = roles.first;
+      navigator.pop(); // Close details sheet
+      _openSubmitForRoleWith(navigator, role);
     } else {
-      // Show role picker bottom sheet
-      _showRolePicker(context);
+      // Birden fazla karaktere davet edilmişse hangisi için çekileceğini seç
+      _showRolePicker(context, roles);
     }
   }
 
-  void _showRolePicker(BuildContext context) {
+  void _openSubmitForRoleWith(NavigatorState navigator, ProjectRole role) {
+    navigator.push(
+      MaterialPageRoute(
+        builder: (_) => AuditionSubmitScreen(
+          project: project,
+          role: role,
+          customScript: _scriptForRole(role),
+          budgetFlexible: _budgetFlexibleForRole(role),
+        ),
+      ),
+    );
+  }
+
+  void _showRolePicker(BuildContext context, List<ProjectRole> roles) {
+    final navigator = Navigator.of(context);
     showModalBottomSheet(
       context: context,
       backgroundColor: AppTheme.surfaceCard,
@@ -280,7 +406,7 @@ class _ProjectDetailsBottomSheetState extends State<ProjectDetailsBottomSheet> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Başvurmak İstediğiniz Rolü Seçin',
+                'Hangi karakter için çekim yapacaksınız?',
                 style: GoogleFonts.outfit(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
@@ -291,10 +417,10 @@ class _ProjectDetailsBottomSheetState extends State<ProjectDetailsBottomSheet> {
               Flexible(
                 child: ListView.separated(
                   shrinkWrap: true,
-                  itemCount: project.roles.length,
-                  separatorBuilder: (_, _) => const Divider(),
+                  itemCount: roles.length,
+                  separatorBuilder: (_, __) => const Divider(),
                   itemBuilder: (c, idx) {
-                    final role = project.roles[idx];
+                    final role = roles[idx];
                     return ListTile(
                       title: Text(
                         role.roleName,
@@ -307,18 +433,8 @@ class _ProjectDetailsBottomSheetState extends State<ProjectDetailsBottomSheet> {
                       trailing: const Icon(Icons.chevron_right, color: AppTheme.accent),
                       onTap: () {
                         Navigator.pop(ctx); // Close picker
-                        Navigator.pop(context); // Close details sheet
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => AuditionSubmitScreen(
-                              project: project,
-                              role: role,
-                              customScript: invite?.data?['auditionScript'],
-                              budgetFlexible: invite?.data?['budgetFlexible'] as bool? ?? false,
-                            ),
-                          ),
-                        );
+                        navigator.pop(); // Close details sheet
+                        _openSubmitForRoleWith(navigator, role);
                       },
                     );
                   },
@@ -332,23 +448,31 @@ class _ProjectDetailsBottomSheetState extends State<ProjectDetailsBottomSheet> {
   }
 
   Widget _buildPropertyRow(String label, Widget valueWidget) {
+    // Etiket sütunu sabit 140px idi; dar ekranlı telefonlarda değer sütunu
+    // daralıp yazılar alt alta kırılıyordu. Artık genişliğe oranlı.
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 140,
-            child: Text(
-              label,
-              style: GoogleFonts.inter(
-                fontSize: 13,
-                color: AppTheme.textSecondary,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final labelWidth = (constraints.maxWidth * 0.34).clamp(96.0, 128.0);
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: labelWidth,
+                child: Text(
+                  label,
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
               ),
-            ),
-          ),
-          Expanded(child: valueWidget),
-        ],
+              const SizedBox(width: 8),
+              Expanded(child: valueWidget),
+            ],
+          );
+        },
       ),
     );
   }
@@ -539,8 +663,8 @@ class _ProjectDetailsBottomSheetState extends State<ProjectDetailsBottomSheet> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              project.roles.isNotEmpty
-                                  ? project.roles.map((r) => r.roleName).join(', ')
+                              _myRoles.isNotEmpty
+                                  ? _myRoles.map((r) => r.roleName).join(', ')
                                   : 'Belirtilmedi',
                               style: GoogleFonts.inter(
                                 fontSize: 12,
@@ -623,7 +747,21 @@ class _ProjectDetailsBottomSheetState extends State<ProjectDetailsBottomSheet> {
                     },
                   ),
 
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
+
+                  // B2. PROJE SORUMLUSU (belirgin kart)
+                  if (project.coordinatorName?.trim().isNotEmpty ?? false) ...[
+                    _buildCoordinatorCard(context),
+                    const SizedBox(height: 16),
+                  ],
+
+                  // B3. KARAKTER KARTLARI (sadece oyuncunun kendi karakterleri)
+                  ..._myRoles.map((r) => Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _buildMyRoleCard(context, r),
+                      )),
+
+                  const SizedBox(height: 8),
 
                   // C. DETAYLAR GRUBU (Tablo)
                   Container(
@@ -659,22 +797,32 @@ class _ProjectDetailsBottomSheetState extends State<ProjectDetailsBottomSheet> {
                         _buildTextPropertyRow('Mecra', project.media ?? 'Belirtilmedi'),
                         
                         // Bütçe Satırı
+                        // Tutar hiçbir cihazda ortadan bölünmez (softWrap:
+                        // false). "Yüksek Bütçe Bildir" yanına sığmazsa
+                        // bütün hâlinde alt satıra geçer.
                         _buildPropertyRow(
                           'Bütçe',
-                          Row(
+                          Wrap(
+                            spacing: 10,
+                            runSpacing: 4,
+                            crossAxisAlignment: WrapCrossAlignment.center,
                             children: [
-                              Text(
-                                project.budget != null && project.budget! > 0
-                                    ? '${project.budget!.toStringAsFixed(0)} TL'
-                                    : 'Belirtilmedi',
-                                style: GoogleFonts.inter(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppTheme.textPrimary,
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  _budgetText ?? 'Belirtilmedi',
+                                  softWrap: false,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: _budgetText != null
+                                        ? AppTheme.success
+                                        : AppTheme.textPrimary,
+                                  ),
                                 ),
                               ),
-                              if (project.budget != null && project.budget! > 0) ...[
-                                const SizedBox(width: 8),
+                              if (_budgetText != null) ...[
                                 GestureDetector(
                                   onTap: () {
                                     ScaffoldMessenger.of(context).showSnackBar(
@@ -686,6 +834,7 @@ class _ProjectDetailsBottomSheetState extends State<ProjectDetailsBottomSheet> {
                                   },
                                   child: Text(
                                     'Yüksek Bütçe Bildir',
+                                    softWrap: false,
                                     style: GoogleFonts.inter(
                                       fontSize: 11,
                                       color: Colors.blue,
@@ -721,19 +870,23 @@ class _ProjectDetailsBottomSheetState extends State<ProjectDetailsBottomSheet> {
                         ),
 
                         _buildTextPropertyRow(
-                            'Rol Durumu',
-                            project.roles.isNotEmpty
-                                ? project.roles.map((r) => r.roleName).join(', ')
+                            _myRoles.length < project.roles.length ? 'Karakteriniz' : 'Roller',
+                            _myRoles.isNotEmpty
+                                ? _myRoles.map((r) => r.roleName).join(', ')
                                 : 'Belirtilmedi'),
 
                         // ── Prompter Metni & Arka Plan Sesi İndikatörleri ──
                         Builder(
                           builder: (context) {
-                            final scriptText = project.roles
-                                .where((r) => r.auditionScript != null && r.auditionScript!.trim().isNotEmpty)
-                                .map((r) => r.auditionScript!)
-                                .join('\n\n---\n\n');
-                            final audioUrl = project.roles
+                            // Yalnızca oyuncunun kendi karakter(ler)ine ait senaryo
+                            final myRoles = _myRoles;
+                            final scriptText = myRoles.length == 1
+                                ? (_scriptForRole(myRoles.first) ?? '')
+                                : myRoles
+                                    .where((r) => _scriptForRole(r) != null)
+                                    .map((r) => '【${r.roleName}】\n${_scriptForRole(r)}')
+                                    .join('\n\n---\n\n');
+                            final audioUrl = myRoles
                                 .where((r) => r.backgroundAudioUrl != null && r.backgroundAudioUrl!.trim().isNotEmpty)
                                 .map((r) => r.backgroundAudioUrl!)
                                 .firstOrNull;
@@ -778,11 +931,20 @@ class _ProjectDetailsBottomSheetState extends State<ProjectDetailsBottomSheet> {
                             children: [
                               Expanded(
                                 child: Text(
-                                  project.coordinatorName ?? 'Belirtilmedi',
+                                  (project.coordinatorName?.trim().isNotEmpty ?? false)
+                                      ? project.coordinatorName!
+                                      : 'Atanmadı',
                                   style: GoogleFonts.inter(
                                     fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppTheme.textPrimary,
+                                    fontWeight: (project.coordinatorName?.trim().isNotEmpty ?? false)
+                                        ? FontWeight.w600
+                                        : FontWeight.normal,
+                                    fontStyle: (project.coordinatorName?.trim().isNotEmpty ?? false)
+                                        ? FontStyle.normal
+                                        : FontStyle.italic,
+                                    color: (project.coordinatorName?.trim().isNotEmpty ?? false)
+                                        ? AppTheme.textPrimary
+                                        : AppTheme.textTertiary,
                                   ),
                                 ),
                               ),
@@ -909,12 +1071,192 @@ class _ProjectDetailsBottomSheetState extends State<ProjectDetailsBottomSheet> {
                       ),
                     ),
                     const SizedBox(height: 10),
-                    _ProjectSampleVideoPlayer(videoUrl: project.sampleVideoUrl!),
+                    AppVideoPlayer(videoUrl: project.sampleVideoUrl!, title: 'Örnek Video'),
                   ],
 
                   const SizedBox(height: 30),
                 ],
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCoordinatorCard(BuildContext context) {
+    final hasPhone = project.coordinatorPhone?.trim().isNotEmpty ?? false;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.accent.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        border: Border.all(color: AppTheme.accent.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: AppTheme.accent.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.support_agent, color: AppTheme.accent, size: 22),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Proje Sorumlusu',
+                  style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textTertiary),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  project.coordinatorName!,
+                  style: GoogleFonts.outfit(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                if (hasPhone)
+                  Text(
+                    project.coordinatorPhone!,
+                    style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textSecondary),
+                  ),
+              ],
+            ),
+          ),
+          if (hasPhone)
+            IconButton(
+              tooltip: 'WhatsApp ile yaz',
+              onPressed: () => _launchWhatsApp(context, project.coordinatorPhone!, project.title),
+              icon: const Icon(Icons.chat, color: Colors.green),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMyRoleCard(BuildContext context, ProjectRole role) {
+    final script = _scriptForRole(role);
+    final isInvited = _invitesByRole.containsKey(role.roleName.trim());
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceLight,
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        border: Border.all(
+          color: isInvited
+              ? AppTheme.accent.withValues(alpha: 0.35)
+              : AppTheme.border.withValues(alpha: 0.2),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.theater_comedy_outlined, size: 18, color: AppTheme.accent),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  role.roleName,
+                  style: GoogleFonts.outfit(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+              ),
+              if (isInvited)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: AppTheme.accent.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+                  ),
+                  child: Text(
+                    'Sizin karakteriniz',
+                    style: GoogleFonts.inter(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.accent,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          if (role.description?.trim().isNotEmpty ?? false) ...[
+            const SizedBox(height: 6),
+            Text(
+              role.description!,
+              style: GoogleFonts.inter(fontSize: 12.5, color: AppTheme.textSecondary, height: 1.4),
+            ),
+          ],
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              if (role.criteriaSummary.isNotEmpty)
+                _roleChip(Icons.person_outline, role.criteriaSummary),
+              if (role.budget != null && role.budget! > 0)
+                _roleChip(
+                  Icons.payments_outlined,
+                  'Bütçe: ${ProjectModel.formatTl(role.budget!)}',
+                  color: AppTheme.success,
+                ),
+            ],
+          ),
+          if (role.auditionNotes?.trim().isNotEmpty ?? false) ...[
+            const SizedBox(height: 8),
+            Text(
+              '🎬 ${role.auditionNotes!}',
+              style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textSecondary, height: 1.4),
+            ),
+          ],
+          if (script != null) ...[
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: () => _showPrompterDialog(context, script),
+              icon: const Icon(Icons.article_outlined, size: 16),
+              label: const Text('Bu Karakterin Senaryosu'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.accent,
+                side: const BorderSide(color: AppTheme.accent),
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _roleChip(IconData icon, String text, {Color? color}) {
+    final c = color ?? AppTheme.textSecondary;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: c.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+        border: Border.all(color: c.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: c),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              text,
+              style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: c),
             ),
           ),
         ],
@@ -936,7 +1278,16 @@ class _ProjectDetailsBottomSheetState extends State<ProjectDetailsBottomSheet> {
               imageUrl: urls[index],
               height: 150,
               width: 220,
-              fit: BoxFit.cover,
+              // Logo / yatay görseller kırpılmasın (ör. "VakıfBank" →
+              // yalnızca "Vakıf" görünüyordu).
+              fit: BoxFit.contain,
+              imageBuilder: (context, provider) => Container(
+                width: 220,
+                height: 150,
+                color: Colors.white,
+                padding: const EdgeInsets.all(6),
+                child: Image(image: provider, fit: BoxFit.contain),
+              ),
               placeholder: (context, url) => Container(
                 width: 220,
                 color: AppTheme.surfaceLight,
@@ -1046,90 +1397,3 @@ class RichTextRenderer extends StatelessWidget {
   }
 }
 
-/// Proje Örnek Video Oynatıcısı
-class _ProjectSampleVideoPlayer extends StatefulWidget {
-  final String videoUrl;
-
-  const _ProjectSampleVideoPlayer({required this.videoUrl});
-
-  @override
-  State<_ProjectSampleVideoPlayer> createState() => _ProjectSampleVideoPlayerState();
-}
-
-class _ProjectSampleVideoPlayerState extends State<_ProjectSampleVideoPlayer> {
-  late VideoPlayerController _videoController;
-  bool _initialized = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _initializeVideo();
-  }
-
-  Future<void> _initializeVideo() async {
-    try {
-      _videoController = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
-      await _videoController.initialize();
-      if (mounted) {
-        setState(() {
-          _initialized = true;
-        });
-      }
-    } catch (e) {
-      debugPrint('Error initializing sample video player: $e');
-    }
-  }
-
-  @override
-  void dispose() {
-    if (_initialized) {
-      _videoController.dispose();
-    }
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) =>
-      MaxWidthBox(maxWidth: 640, child: _buildPlayer(context));
-
-  Widget _buildPlayer(BuildContext context) {
-    if (!_initialized) {
-      return Container(
-        height: 180,
-        width: double.infinity,
-        decoration: BoxDecoration(
-          color: AppTheme.surfaceLight,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: const Center(
-          child: CircularProgressIndicator(color: AppTheme.accent),
-        ),
-      );
-    }
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          AspectRatio(
-            aspectRatio: _videoController.value.aspectRatio,
-            child: VideoPlayer(_videoController),
-          ),
-          IconButton(
-            iconSize: 48,
-            icon: Icon(
-              _videoController.value.isPlaying ? Icons.pause_circle : Icons.play_circle,
-              color: Colors.white.withValues(alpha: 0.8),
-            ),
-            onPressed: () {
-              setState(() {
-                _videoController.value.isPlaying ? _videoController.pause() : _videoController.play();
-              });
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
